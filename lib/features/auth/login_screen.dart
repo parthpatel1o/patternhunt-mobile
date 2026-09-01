@@ -38,7 +38,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           },
         );
       } else {
-        await auth.signInWithPassword(email: _email.text.trim(), password: _password.text);
+        final response = await auth.signInWithPassword(
+          email: _email.text.trim(),
+          password: _password.text,
+        );
+        if (response.session == null) {
+          setState(() => _error = 'Could not start a session. Check your email is confirmed.');
+          return;
+        }
       }
       if (mounted) context.go('/');
     } on AuthException catch (e) {

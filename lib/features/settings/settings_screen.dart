@@ -69,16 +69,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               TextField(controller: _name, decoration: const InputDecoration(labelText: 'Designer name')),
             ],
             const SizedBox(height: 12),
-        DropdownMenu<String>(
-          initialSelection: _category,
-          label: const Text('Default category'),
-          dropdownMenuEntries: [
-            DropdownMenuEntry(value: 'all', label: 'All categories'),
-            for (final c in AppConstants.instance.categories)
-              DropdownMenuEntry(value: c.slug, label: c.name),
-          ],
-          onSelected: (v) => setState(() => _category = v ?? 'all'),
-        ),
+            InputDecorator(
+              decoration: const InputDecoration(labelText: 'Default category'),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _category,
+                  isExpanded: true,
+                  items: [
+                    const DropdownMenuItem(value: 'all', child: Text('All categories')),
+                    for (final c in AppConstants.instance.categories)
+                      DropdownMenuItem(value: c.slug, child: Text(c.name)),
+                  ],
+                  onChanged: (v) => setState(() => _category = v ?? 'all'),
+                ),
+              ),
+            ),
             const SizedBox(height: 24),
             FilledButton(onPressed: _saving ? null : () => _save(profile), child: Text(_saving ? 'Saving…' : 'Save settings')),
             const SizedBox(height: 12),

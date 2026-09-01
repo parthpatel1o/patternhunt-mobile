@@ -1,5 +1,9 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/providers/providers.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/home/home_screen.dart';
@@ -13,10 +17,51 @@ import '../../features/settings/settings_screen.dart';
 import '../../features/submit/submit_screen.dart';
 import '../../shared/widgets/app_shell.dart';
 
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
+
+/// Notifies GoRouter when auth changes without recreating the router instance.
+class _RouterRefresh extends ChangeNotifier {
+  _RouterRefresh() {
+    _subscription = Supabase.instance.client.auth.onAuthStateChange.listen((_) {
+      notifyListeners();
+    });
+  }
+
+  late final StreamSubscription<AuthState> _subscription;
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}
+
+final _routerRefreshProvider = Provider<_RouterRefresh>((ref) {
+  final notifier = _RouterRefresh();
+  ref.onDispose(notifier.dispose);
+  return notifier;
+});
+
 final routerProvider = Provider<GoRouter>((ref) {
-  final session = ref.watch(sessionProvider);
-  return GoRouter(
+  final refresh = ref.watch(_routerRefreshProvider);
+
+  final router = GoRouter(
+    navigatorKey: _rootNavigatorKey,
     initialLocation: '/',
+    refreshListenable: refresh,
+    redirect: (context, state) {
+      final session = ref.read(sessionProvider);
+      final loggingIn = state.matchedLocation == '/login';
+      final profile = ref.read(profileProvider).valueOrNull;
+      if (session == null && ['/submit', '/saved', '/profile', '/mine'].contains(state.matchedLocation)) {
+        return '/login';
+      }
+      if (session != null && state.matchedLocation == '/submit' && profile != null && !profile.isPatternDesigner) {
+        return '/profile';
+      }
+      if (session != null && loggingIn) return '/';
+      return null;
+    },
     routes: [
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
@@ -44,17 +89,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => CreatorScreen(slug: state.pathParameters['slug']!),
       ),
     ],
-    redirect: (context, state) {
-      final loggingIn = state.matchedLocation == '/login';
-      final profile = ref.read(profileProvider).valueOrNull;
-      if (session == null && ['/submit', '/saved', '/profile', '/mine'].contains(state.matchedLocation)) {
-        return '/login';
-      }
-      if (session != null && state.matchedLocation == '/submit' && profile != null && !profile.isPatternDesigner) {
-        return '/profile';
-      }
-      if (session != null && loggingIn) return '/';
-      return null;
-    },
   );
+
+  ref.onDispose(router.dispose);
+  return router;
 });

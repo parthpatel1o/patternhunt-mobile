@@ -16,7 +16,7 @@ cp .env.example .env
 flutter run \
   --dart-define=SUPABASE_URL=https://your-project.supabase.co \
   --dart-define=SUPABASE_ANON_KEY=your-anon-key \
-  --dart-define=API_BASE_URL=https://your-domain.com/api/v1
+  --dart-define=API_BASE_URL=https://www.patternhunt.co/api/v1
 ```
 
 ## Architecture

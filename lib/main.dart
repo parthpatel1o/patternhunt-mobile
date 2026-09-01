@@ -7,6 +7,7 @@ import 'core/constants/app_constants.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  Env.validate();
   await AppConstants.load();
   await Supabase.initialize(
     url: Env.supabaseUrl,

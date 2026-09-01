@@ -51,10 +51,7 @@ class AppShell extends ConsumerWidget {
           ),
         ],
       ),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 200),
-        child: KeyedSubtree(key: ValueKey(location), child: child),
-      ),
+      body: child,
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedIndex.clamp(0, destinations.length - 1),
         onDestinationSelected: onTap,
