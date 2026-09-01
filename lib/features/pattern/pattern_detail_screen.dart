@@ -1,0 +1,119 @@
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/api/api_client.dart';
+import '../../core/providers/providers.dart';
+import '../../shared/widgets/save_board_sheet.dart';
+import '../../shared/widgets/skeleton_loader.dart';
+
+String slugifyDesigner(String name) {
+  return name
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'^-|-$'), '');
+}
+
+class PatternDetailScreen extends ConsumerWidget {
+  const PatternDetailScreen({super.key, required this.patternId});
+
+  final String patternId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final patternAsync = ref.watch(patternDetailProvider(patternId));
+
+    return patternAsync.when(
+      loading: () => Scaffold(
+        appBar: AppBar(),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: const [SkeletonBox(width: double.infinity, height: 320, borderRadius: 20)],
+        ),
+      ),
+      error: (e, _) => Scaffold(appBar: AppBar(), body: Center(child: Text('$e'))),
+      data: (pattern) {
+        return Scaffold(
+          appBar: AppBar(title: Text(pattern.title)),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              SizedBox(
+                height: 320,
+                child: PageView.builder(
+                  itemCount: pattern.imageUrls.length,
+                  itemBuilder: (context, index) => ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: CachedNetworkImage(imageUrl: pattern.imageUrls[index], fit: BoxFit.cover),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: () => context.push('/creator/${slugifyDesigner(pattern.designerName)}'),
+                child: Text(pattern.designerName, style: Theme.of(context).textTheme.titleMedium),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  FilledButton(
+                    onPressed: () async {
+                      if (ref.read(sessionProvider) == null) {
+                        if (context.mounted) context.push('/login');
+                        return;
+                      }
+                      HapticFeedback.lightImpact();
+                      try {
+                        await ref.read(apiClientProvider).post('/patterns/${pattern.id}/vote');
+                        ref.invalidate(patternDetailProvider(patternId));
+                        ref.invalidate(patternsProvider);
+                      } on ApiException catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+                        }
+                      }
+                    },
+                    child: Text('Vote · ${pattern.voteCount}'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    onPressed: () => showSaveBoardSheet(context, ref, pattern.id),
+                    child: Text(pattern.saved ? 'Saved' : 'Save'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (pattern.patternUrl != null)
+                FilledButton.tonal(
+                  onPressed: () => launchUrl(Uri.parse(pattern.patternUrl!)),
+                  child: const Text('Open pattern link'),
+                ),
+              if (pattern.hasPdf) ...[
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: () async {
+                    try {
+                      final data = await ref.read(apiClientProvider).getData(
+                            '/patterns/${pattern.id}/pdf',
+                            map: (j) => j as Map<String, dynamic>,
+                          );
+                      final url = data['url'] as String?;
+                      if (url != null) await launchUrl(Uri.parse(url));
+                    } on ApiException catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+                      }
+                    }
+                  },
+                  child: const Text('Download PDF'),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}

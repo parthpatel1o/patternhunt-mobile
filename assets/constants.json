@@ -1,0 +1,26 @@
+{
+  "appName": "PatternHunt",
+  "defaultBoardName": "Saved",
+  "categories": [
+    { "slug": "amigurumi", "name": "Amigurumi" },
+    { "slug": "wearables", "name": "Wearables" },
+    { "slug": "accessories", "name": "Accessories" },
+    { "slug": "other", "name": "Other" }
+  ],
+  "rankPeriods": [
+    { "value": "all", "label": "All time" },
+    { "value": "week", "label": "Past 7 days" },
+    { "value": "month", "label": "Past 30 days" }
+  ],
+  "defaultRankBoardCategory": "amigurumi",
+  "defaultUserCategory": "all",
+  "maxImageBytes": 5242880,
+  "maxPdfBytes": 20971520,
+  "maxPatternImages": 15,
+  "imageOutputSize": 1200,
+  "imageAspect": 1,
+  "imageAspectTolerance": 0.08,
+  "allowedImageTypes": ["image/jpeg", "image/png", "image/webp"],
+  "voteRateLimitWindowMs": 60000,
+  "voteRateLimitMax": 20
+}
