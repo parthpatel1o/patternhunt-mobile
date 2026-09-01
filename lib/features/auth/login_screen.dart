@@ -67,49 +67,53 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(_signup ? 'Create account' : 'Log in')),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          OutlinedButton.icon(
-            onPressed: _loading ? null : _googleSignIn,
-            icon: const Icon(Icons.g_mobiledata, size: 28),
-            label: const Text('Continue with Google'),
-          ),
-          const SizedBox(height: 24),
-          const Divider(),
-          const SizedBox(height: 24),
-          TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email')),
+    final titleStyle = Theme.of(context).textTheme.titleLarge?.copyWith(
+      fontWeight: FontWeight.w700,
+      color: AppColors.foreground,
+    );
+
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Text(_signup ? 'Create account' : 'Log in', style: titleStyle),
+        const SizedBox(height: 24),
+        OutlinedButton.icon(
+          onPressed: _loading ? null : _googleSignIn,
+          icon: const Icon(Icons.g_mobiledata, size: 28),
+          label: const Text('Continue with Google'),
+        ),
+        const SizedBox(height: 24),
+        const Divider(),
+        const SizedBox(height: 24),
+        TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email')),
+        const SizedBox(height: 12),
+        TextField(controller: _password, obscureText: true, decoration: const InputDecoration(labelText: 'Password')),
+        if (_signup) ...[
           const SizedBox(height: 12),
-          TextField(controller: _password, obscureText: true, decoration: const InputDecoration(labelText: 'Password')),
-          if (_signup) ...[
-            const SizedBox(height: 12),
-            SwitchListTile(
-              title: const Text('Register as a pattern designer'),
-              value: _designer,
-              onChanged: (v) => setState(() => _designer = v),
-            ),
-            if (_designer) ...[
-              const SizedBox(height: 8),
-              TextField(controller: _name, decoration: const InputDecoration(labelText: 'Designer name')),
-            ],
-          ],
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(_error!, style: const TextStyle(color: AppColors.destructive)),
-          ],
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: _loading ? null : _submit,
-            child: Text(_loading ? 'Please wait…' : (_signup ? 'Sign up' : 'Log in')),
+          SwitchListTile(
+            title: const Text('Register as a pattern designer'),
+            value: _designer,
+            onChanged: (v) => setState(() => _designer = v),
           ),
-          TextButton(
-            onPressed: () => setState(() => _signup = !_signup),
-            child: Text(_signup ? 'Already have an account? Log in' : 'New here? Create an account'),
-          ),
+          if (_designer) ...[
+            const SizedBox(height: 8),
+            TextField(controller: _name, decoration: const InputDecoration(labelText: 'Designer name')),
+          ],
         ],
-      ),
+        if (_error != null) ...[
+          const SizedBox(height: 12),
+          Text(_error!, style: const TextStyle(color: AppColors.destructive)),
+        ],
+        const SizedBox(height: 24),
+        FilledButton(
+          onPressed: _loading ? null : _submit,
+          child: Text(_loading ? 'Please wait…' : (_signup ? 'Sign up' : 'Log in')),
+        ),
+        TextButton(
+          onPressed: () => setState(() => _signup = !_signup),
+          child: Text(_signup ? 'Already have an account? Log in' : 'New here? Create an account'),
+        ),
+      ],
     );
   }
 }

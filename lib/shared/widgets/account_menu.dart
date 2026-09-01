@@ -31,11 +31,11 @@ void showAccountMenu(BuildContext context, WidgetRef ref) {
                 },
               ),
             ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: const Text('Settings'),
+              leading: const Icon(Icons.person_outline),
+              title: const Text('Profile'),
               onTap: () {
                 Navigator.pop(context);
-                context.go('/settings');
+                context.go('/profile');
               },
             ),
             if (session == null)

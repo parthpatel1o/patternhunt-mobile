@@ -24,11 +24,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
           GoRoute(path: '/saved', builder: (context, state) => const SavedScreen()),
           GoRoute(path: '/submit', builder: (context, state) => const SubmitScreen()),
-          GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
+          GoRoute(path: '/profile', builder: (context, state) => const SettingsScreen()),
+          GoRoute(path: '/settings', redirect: (context, _) => '/profile'),
+          GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
         ],
       ),
       GoRoute(path: '/search', builder: (context, state) => const SearchScreen()),
-      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(path: '/mine', builder: (context, state) => const MineScreen()),
       GoRoute(
         path: '/saved/:boardId',
@@ -46,11 +47,11 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final loggingIn = state.matchedLocation == '/login';
       final profile = ref.read(profileProvider).valueOrNull;
-      if (session == null && ['/submit', '/saved', '/settings', '/mine'].contains(state.matchedLocation)) {
+      if (session == null && ['/submit', '/saved', '/profile', '/mine'].contains(state.matchedLocation)) {
         return '/login';
       }
       if (session != null && state.matchedLocation == '/submit' && profile != null && !profile.isPatternDesigner) {
-        return '/settings';
+        return '/profile';
       }
       if (session != null && loggingIn) return '/';
       return null;

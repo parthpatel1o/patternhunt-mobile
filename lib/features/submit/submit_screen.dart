@@ -120,7 +120,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
             children: [
               const Text('Turn on pattern designer in Settings before submitting.'),
               const SizedBox(height: 16),
-              FilledButton(onPressed: () => context.go('/settings'), child: const Text('Go to settings')),
+              FilledButton(onPressed: () => context.go('/profile'), child: const Text('Go to profile')),
             ],
           ),
         ),
@@ -135,7 +135,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
             children: [
               const Text('Add your designer name in Settings before submitting.'),
               const SizedBox(height: 16),
-              FilledButton(onPressed: () => context.go('/settings'), child: const Text('Go to settings')),
+              FilledButton(onPressed: () => context.go('/profile'), child: const Text('Go to profile')),
             ],
           ),
         ),
