@@ -20,6 +20,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _designer = false;
   bool _loading = false;
   String? _error;
+  String? _signupSuccessEmail;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _resetSignupSuccess() {
+    setState(() {
+      _signupSuccessEmail = null;
+      _signup = false;
+      _error = null;
+      _password.clear();
+      _name.clear();
+    });
+  }
 
   Future<void> _submit() async {
     setState(() {
@@ -29,14 +48,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final auth = Supabase.instance.client.auth;
       if (_signup) {
-        await auth.signUp(
-          email: _email.text.trim(),
+        final email = _email.text.trim();
+        final response = await auth.signUp(
+          email: email,
           password: _password.text,
+          emailRedirectTo: '${Env.normalizedApiBaseUrl.replaceAll('/api/v1', '')}/auth/callback',
           data: {
             'is_pattern_designer': _designer,
             if (_designer) 'display_name': _name.text.trim(),
           },
         );
+        if (response.session == null) {
+          setState(() {
+            _signupSuccessEmail = email;
+            _password.clear();
+            _name.clear();
+          });
+          return;
+        }
       } else {
         final response = await auth.signInWithPassword(
           email: _email.text.trim(),
@@ -72,8 +101,52 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Widget _buildSignupSuccess() {
+    final titleStyle = Theme.of(context).textTheme.titleLarge?.copyWith(
+      fontWeight: FontWeight.w700,
+      color: AppColors.foreground,
+    );
+
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        const SizedBox(height: 16),
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: const Icon(Icons.mark_email_read_outlined, size: 32, color: AppColors.accent),
+        ),
+        const SizedBox(height: 24),
+        Text('Account created', style: titleStyle),
+        const SizedBox(height: 12),
+        Text(
+          'We sent a confirmation link to $_signupSuccessEmail.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Open that email and confirm your account, then come back here to log in.',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+        ),
+        const SizedBox(height: 32),
+        FilledButton(
+          onPressed: _resetSignupSuccess,
+          child: const Text('Back to log in'),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_signupSuccessEmail != null) {
+      return _buildSignupSuccess();
+    }
+
     final titleStyle = Theme.of(context).textTheme.titleLarge?.copyWith(
       fontWeight: FontWeight.w700,
       color: AppColors.foreground,
@@ -117,7 +190,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           child: Text(_loading ? 'Please wait…' : (_signup ? 'Sign up' : 'Log in')),
         ),
         TextButton(
-          onPressed: () => setState(() => _signup = !_signup),
+          onPressed: _loading
+              ? null
+              : () => setState(() {
+                  _signup = !_signup;
+                  _error = null;
+                }),
           child: Text(_signup ? 'Already have an account? Log in' : 'New here? Create an account'),
         ),
       ],
