@@ -16,6 +16,8 @@ final sessionProvider = Provider<Session?>((ref) {
 
 final passwordRecoveryProvider = StateProvider<bool>((ref) => false);
 
+final pendingSignupWelcomeProvider = StateProvider<bool>((ref) => false);
+
 final authSignOutProvider = Provider<Future<void> Function()>((ref) {
   return () => Supabase.instance.client.auth.signOut();
 });
@@ -109,3 +111,10 @@ final myPatternsProvider = FutureProvider<List<PatternCard>>((ref) async {
     },
   );
 });
+
+void invalidatePatternSaveState(WidgetRef ref, String patternId) {
+  ref.invalidate(patternDetailProvider(patternId));
+  ref.invalidate(boardsWithPatternsProvider);
+  ref.invalidate(boardsProvider);
+  ref.invalidate(patternsProvider);
+}

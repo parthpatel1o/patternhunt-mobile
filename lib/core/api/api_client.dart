@@ -110,11 +110,17 @@ class ApiClient {
     });
   }
 
-  Future<Map<String, dynamic>> post(String path, {dynamic data, String? accessToken}) async {
+  Future<Map<String, dynamic>> post(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? query,
+    String? accessToken,
+  }) async {
     return _run(() async {
       final response = await _dio.post<Map<String, dynamic>>(
         path,
         data: data,
+        queryParameters: query,
         options: _options(accessToken: accessToken),
       );
       final body = response.data;
@@ -143,10 +149,11 @@ class ApiClient {
     });
   }
 
-  Future<void> delete(String path, {String? accessToken}) async {
+  Future<void> delete(String path, {Map<String, dynamic>? query, String? accessToken}) async {
     return _run(() async {
       final response = await _dio.delete<Map<String, dynamic>>(
         path,
+        queryParameters: query,
         options: _options(accessToken: accessToken),
       );
       final body = response.data;

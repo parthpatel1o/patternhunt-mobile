@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/api/api_client.dart';
+import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../shared/widgets/save_board_sheet.dart';
 import '../../shared/widgets/skeleton_loader.dart';
@@ -16,14 +17,44 @@ String slugifyDesigner(String name) {
       .replaceAll(RegExp(r'^-|-$'), '');
 }
 
-class PatternDetailScreen extends ConsumerWidget {
+class PatternDetailScreen extends ConsumerStatefulWidget {
   const PatternDetailScreen({super.key, required this.patternId});
 
   final String patternId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final patternAsync = ref.watch(patternDetailProvider(patternId));
+  ConsumerState<PatternDetailScreen> createState() => _PatternDetailScreenState();
+}
+
+class _PatternDetailScreenState extends ConsumerState<PatternDetailScreen> {
+  bool _savePending = false;
+
+  Future<void> _toggleSave(PatternCard pattern) async {
+    if (ref.read(sessionProvider) == null) {
+      if (mounted) context.push('/login');
+      return;
+    }
+    setState(() => _savePending = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      if (pattern.saved) {
+        await api.delete('/patterns/${pattern.id}/save');
+      } else {
+        await api.post('/patterns/${pattern.id}/save');
+      }
+      invalidatePatternSaveState(ref, pattern.id);
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _savePending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final patternAsync = ref.watch(patternDetailProvider(widget.patternId));
 
     return patternAsync.when(
       loading: () => Scaffold(
@@ -67,7 +98,7 @@ class PatternDetailScreen extends ConsumerWidget {
                       HapticFeedback.lightImpact();
                       try {
                         await ref.read(apiClientProvider).post('/patterns/${pattern.id}/vote');
-                        ref.invalidate(patternDetailProvider(patternId));
+                        ref.invalidate(patternDetailProvider(widget.patternId));
                         ref.invalidate(patternsProvider);
                       } on ApiException catch (e) {
                         if (context.mounted) {
@@ -79,7 +110,8 @@ class PatternDetailScreen extends ConsumerWidget {
                   ),
                   const SizedBox(width: 8),
                   OutlinedButton(
-                    onPressed: () => showSaveBoardSheet(context, ref, pattern.id),
+                    onPressed: _savePending ? null : () => _toggleSave(pattern),
+                    onLongPress: _savePending ? null : () => showSaveBoardSheet(context, ref, pattern.id),
                     child: Text(pattern.saved ? 'Saved' : 'Save'),
                   ),
                 ],

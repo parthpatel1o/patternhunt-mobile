@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/auth/signup_welcome.dart';
 import '../../core/config/env.dart';
+import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 
 enum _AuthMode { login, signup, forgot }
@@ -75,13 +77,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         final response = await auth.signUp(
           email: email,
           password: _password.text,
-          emailRedirectTo: '${Env.siteUrl}/auth/callback?next=${Uri.encodeComponent('/')}&welcome=1',
+          emailRedirectTo: Env.authRedirectUrl,
           data: {
             'is_pattern_designer': _designer,
             if (_designer) 'display_name': _name.text.trim(),
           },
         );
         if (response.session == null) {
+          ref.read(pendingSignupWelcomeProvider.notifier).state = true;
+          await markPendingSignupWelcome();
           setState(() {
             _signupSuccessEmail = email;
             _password.clear();

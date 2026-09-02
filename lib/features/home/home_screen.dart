@@ -114,7 +114,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               return Column(
                 children: [
                   for (var i = 0; i < patterns.length; i++) ...[
-                    RepaintBoundary(child: PatternCardWidget(pattern: patterns[i], rank: i + 1)),
+                    RepaintBoundary(
+                      child: PatternCardWidget(pattern: patterns[i], rank: i + 1, rankPeriod: period),
+                    ),
                     const SizedBox(height: 12),
                   ],
                 ],

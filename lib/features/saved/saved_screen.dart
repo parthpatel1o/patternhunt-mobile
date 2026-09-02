@@ -45,7 +45,16 @@ class SavedScreen extends ConsumerWidget {
                           : const Icon(Icons.folder_outlined),
                       title: Text(group.board.name),
                       subtitle: Text('${group.patterns.length} patterns'),
-                      trailing: const Icon(Icons.chevron_right),
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (value) {
+                          if (value == 'delete') {
+                            _deleteBoard(context, ref, group.board.id, group.board.name);
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(value: 'delete', child: Text('Delete folder')),
+                        ],
+                      ),
                       onTap: () => context.push('/saved/${group.board.id}'),
                     ),
                   );
@@ -77,6 +86,30 @@ class SavedScreen extends ConsumerWidget {
     if (name == null || name.isEmpty) return;
     try {
       await ref.read(apiClientProvider).post('/boards', data: {'name': name});
+      ref.invalidate(boardsWithPatternsProvider);
+      ref.invalidate(boardsProvider);
+    } on ApiException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
+  Future<void> _deleteBoard(BuildContext context, WidgetRef ref, String boardId, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete “$name”?'),
+        content: const Text('This folder will be removed, and patterns in it will be unsaved.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete folder')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(apiClientProvider).delete('/boards', query: {'boardId': boardId});
       ref.invalidate(boardsWithPatternsProvider);
       ref.invalidate(boardsProvider);
     } on ApiException catch (e) {

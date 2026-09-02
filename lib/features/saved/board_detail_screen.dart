@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 
@@ -46,16 +47,25 @@ class BoardDetailScreen extends ConsumerWidget {
                     return Dismissible(
                       key: ValueKey(pattern.id),
                       direction: DismissDirection.endToStart,
-                      onDismissed: (_) async {
-                        await ref.read(apiClientProvider).delete('/patterns/${pattern.id}/save');
-                        ref.invalidate(boardsWithPatternsProvider);
-                      },
                       background: Container(
                         alignment: Alignment.centerRight,
                         padding: const EdgeInsets.only(right: 16),
                         color: Colors.red.shade100,
                         child: const Icon(Icons.delete_outline),
                       ),
+                      confirmDismiss: (_) async {
+                        try {
+                          await ref.read(apiClientProvider).delete('/patterns/${pattern.id}/save');
+                          ref.invalidate(boardsWithPatternsProvider);
+                          invalidatePatternSaveState(ref, pattern.id);
+                          return true;
+                        } on ApiException catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+                          }
+                          return false;
+                        }
+                      },
                       child: InkWell(
                         onTap: () => context.push('/pattern/${pattern.id}'),
                         borderRadius: BorderRadius.circular(16),

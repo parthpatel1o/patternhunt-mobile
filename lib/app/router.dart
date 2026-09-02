@@ -54,15 +54,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       final session = ref.read(sessionProvider);
       final loggingIn = state.matchedLocation == '/login';
       final recovery = ref.read(passwordRecoveryProvider);
-      final profile = ref.read(profileProvider).valueOrNull;
       if (recovery && state.matchedLocation != '/reset-password') {
         return '/reset-password';
       }
       if (session == null && ['/submit', '/saved', '/profile', '/mine'].contains(state.matchedLocation)) {
         return '/login';
       }
-      if (session != null && state.matchedLocation == '/submit' && profile != null && !profile.isPatternDesigner) {
-        return '/profile';
+      if (session != null && state.matchedLocation == '/submit') {
+        final profileAsync = ref.read(profileProvider);
+        if (profileAsync.isLoading) return null;
+        if (profileAsync.valueOrNull != null && !profileAsync.valueOrNull!.isPatternDesigner) {
+          return '/profile';
+        }
       }
       if (session != null && loggingIn && !recovery) return '/';
       return null;

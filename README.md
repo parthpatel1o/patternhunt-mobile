@@ -37,5 +37,5 @@ Update these when the web API contract or design tokens change. See `openapi.yam
 
 1. **iOS**: Archive with Xcode → Distribute App → TestFlight / App Store Connect.
 2. **Android**: `flutter build appbundle` → upload to Play Console (Internal testing track first).
-3. Add `com.patternhunt://login-callback` to Supabase Auth redirect URLs for Google OAuth.
+3. Add `com.patternhunt://login-callback` to Supabase Auth redirect URLs (Google OAuth, email signup confirmation, and password reset).
 4. Configure signing (iOS team + Android keystore) before release builds.

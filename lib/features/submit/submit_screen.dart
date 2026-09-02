@@ -24,7 +24,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
   final _title = TextEditingController();
   final _url = TextEditingController();
   late String _category;
-  bool _isFree = true;
+  bool _isFree = false;
   final List<File> _images = [];
   File? _pdf;
   bool _uploading = false;

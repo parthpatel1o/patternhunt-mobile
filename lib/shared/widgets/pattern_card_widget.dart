@@ -8,12 +8,19 @@ import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import 'save_board_sheet.dart';
 
 class PatternCardWidget extends ConsumerStatefulWidget {
-  const PatternCardWidget({super.key, required this.pattern, required this.rank});
+  const PatternCardWidget({
+    super.key,
+    required this.pattern,
+    required this.rank,
+    this.rankPeriod = 'all',
+  });
 
   final PatternCard pattern;
   final int rank;
+  final String rankPeriod;
 
   @override
   ConsumerState<PatternCardWidget> createState() => _PatternCardWidgetState();
@@ -21,6 +28,36 @@ class PatternCardWidget extends ConsumerStatefulWidget {
 
 class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
   bool _voting = false;
+  bool _saving = false;
+  late bool _saved;
+  late bool _voted;
+  late int _voteCount;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncFromPattern();
+  }
+
+  @override
+  void didUpdateWidget(PatternCardWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.pattern.id != widget.pattern.id ||
+        oldWidget.pattern.saved != widget.pattern.saved ||
+        oldWidget.pattern.voted != widget.pattern.voted ||
+        oldWidget.pattern.voteCount != widget.pattern.voteCount) {
+      _syncFromPattern();
+    }
+  }
+
+  void _syncFromPattern() {
+    _saved = widget.pattern.saved;
+    _voted = widget.pattern.voted;
+    _voteCount = widget.pattern.voteCount;
+  }
+
+  Map<String, dynamic>? get _voteQuery =>
+      widget.rankPeriod == 'all' ? null : {'period': widget.rankPeriod};
 
   (Color bg, Color border) _rankColors() {
     return switch (widget.rank) {
@@ -38,15 +75,67 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
     }
     setState(() => _voting = true);
     HapticFeedback.lightImpact();
+    final previousVoted = _voted;
+    final previousCount = _voteCount;
+    setState(() {
+      _voted = !_voted;
+      _voteCount = (_voteCount + (_voted ? 1 : -1)).clamp(0, 1 << 30);
+    });
     try {
       final api = ref.read(apiClientProvider);
-      await api.post('/patterns/${widget.pattern.id}/vote');
+      final result = await api.post('/patterns/${widget.pattern.id}/vote', query: _voteQuery);
+      final voted = result['voted'] as bool?;
+      final voteCount = result['voteCount'] as num?;
+      if (voted != null && voteCount != null && mounted) {
+        setState(() {
+          _voted = voted;
+          _voteCount = voteCount.toInt();
+        });
+      }
       ref.invalidate(patternsProvider);
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        setState(() {
+          _voted = previousVoted;
+          _voteCount = previousCount;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
     } finally {
       if (mounted) setState(() => _voting = false);
     }
+  }
+
+  Future<void> _toggleSave() async {
+    if (ref.read(sessionProvider) == null) {
+      if (mounted) context.push('/login');
+      return;
+    }
+    setState(() => _saving = true);
+    final previous = _saved;
+    try {
+      final api = ref.read(apiClientProvider);
+      if (_saved) {
+        setState(() => _saved = false);
+        await api.delete('/patterns/${widget.pattern.id}/save');
+      } else {
+        setState(() => _saved = true);
+        await api.post('/patterns/${widget.pattern.id}/save');
+      }
+      invalidatePatternSaveState(ref, widget.pattern.id);
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() => _saved = previous);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _openSaveSheet() async {
+    await showSaveBoardSheet(context, ref, widget.pattern.id);
+    invalidatePatternSaveState(ref, widget.pattern.id);
   }
 
   @override
@@ -106,22 +195,31 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
                           backgroundColor: AppColors.primary.withValues(alpha: 0.35),
                         ),
                         const Spacer(),
+                        IconButton(
+                          onPressed: _saving ? null : _toggleSave,
+                          onLongPress: _saving ? null : _openSaveSheet,
+                          icon: Icon(
+                            _saved ? Icons.bookmark : Icons.bookmark_outline,
+                            color: _saved ? AppColors.accent : AppColors.muted,
+                          ),
+                          tooltip: _saved ? 'Saved' : 'Save',
+                        ),
                         FilledButton.tonal(
                           onPressed: _voting ? null : _toggleVote,
                           style: FilledButton.styleFrom(
-                            backgroundColor: pattern.voted ? AppColors.accent : AppColors.card,
-                            foregroundColor: pattern.voted ? AppColors.accentForeground : AppColors.accent,
+                            backgroundColor: _voted ? AppColors.accent : AppColors.card,
+                            foregroundColor: _voted ? AppColors.accentForeground : AppColors.accent,
                             shape: const StadiumBorder(),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.arrow_upward, size: 18, color: pattern.voted ? AppColors.accentForeground : AppColors.accent),
+                              Icon(Icons.arrow_upward, size: 18, color: _voted ? AppColors.accentForeground : AppColors.accent),
                               const SizedBox(width: 4),
-                              Text('${pattern.voteCount}'),
+                              Text('$_voteCount'),
                             ],
                           ),
-                        ).animate(target: pattern.voted ? 1 : 0).scale(begin: const Offset(1, 1), end: const Offset(1.08, 1.08), duration: 280.ms),
+                        ).animate(target: _voted ? 1 : 0).scale(begin: const Offset(1, 1), end: const Offset(1.08, 1.08), duration: 280.ms),
                       ],
                     ),
                   ],
