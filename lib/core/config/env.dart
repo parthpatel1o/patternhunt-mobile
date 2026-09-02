@@ -22,6 +22,8 @@ class Env {
     return trimmed.replaceFirst('://patternhunt.co', '://www.patternhunt.co');
   }
 
+  static String get siteUrl => normalizedApiBaseUrl.replaceAll(RegExp(r'/api/v1$'), '');
+
   static void validate() {
     if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
       throw StateError(

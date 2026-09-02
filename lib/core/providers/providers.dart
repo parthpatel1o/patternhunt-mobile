@@ -14,6 +14,8 @@ final sessionProvider = Provider<Session?>((ref) {
   return Supabase.instance.client.auth.currentSession;
 });
 
+final passwordRecoveryProvider = StateProvider<bool>((ref) => false);
+
 final authSignOutProvider = Provider<Future<void> Function()>((ref) {
   return () => Supabase.instance.client.auth.signOut();
 });

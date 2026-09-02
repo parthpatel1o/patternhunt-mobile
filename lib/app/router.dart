@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/providers/providers.dart';
 import '../../features/auth/login_screen.dart';
+import '../../features/auth/reset_password_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/mine/mine_screen.dart';
 import '../../features/pattern/pattern_detail_screen.dart';
@@ -52,14 +53,18 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final session = ref.read(sessionProvider);
       final loggingIn = state.matchedLocation == '/login';
+      final recovery = ref.read(passwordRecoveryProvider);
       final profile = ref.read(profileProvider).valueOrNull;
+      if (recovery && state.matchedLocation != '/reset-password') {
+        return '/reset-password';
+      }
       if (session == null && ['/submit', '/saved', '/profile', '/mine'].contains(state.matchedLocation)) {
         return '/login';
       }
       if (session != null && state.matchedLocation == '/submit' && profile != null && !profile.isPatternDesigner) {
         return '/profile';
       }
-      if (session != null && loggingIn) return '/';
+      if (session != null && loggingIn && !recovery) return '/';
       return null;
     },
     routes: [
@@ -72,6 +77,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/profile', builder: (context, state) => const SettingsScreen()),
           GoRoute(path: '/settings', redirect: (context, _) => '/profile'),
           GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+          GoRoute(path: '/reset-password', builder: (context, state) => const ResetPasswordScreen()),
         ],
       ),
       GoRoute(path: '/search', builder: (context, state) => const SearchScreen()),

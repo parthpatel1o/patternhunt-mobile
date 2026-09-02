@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/config/env.dart';
 import '../../core/theme/app_colors.dart';
 
+enum _AuthMode { login, signup, forgot }
+
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -16,11 +18,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _name = TextEditingController();
-  bool _signup = false;
+  _AuthMode _mode = _AuthMode.login;
   bool _designer = false;
   bool _loading = false;
   String? _error;
   String? _signupSuccessEmail;
+  String? _forgotSuccessEmail;
 
   @override
   void dispose() {
@@ -33,10 +36,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void _resetSignupSuccess() {
     setState(() {
       _signupSuccessEmail = null;
-      _signup = false;
+      _mode = _AuthMode.login;
       _error = null;
       _password.clear();
       _name.clear();
+    });
+  }
+
+  void _resetForgotSuccess() {
+    setState(() {
+      _forgotSuccessEmail = null;
+      _mode = _AuthMode.login;
+      _error = null;
     });
   }
 
@@ -47,12 +58,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
     try {
       final auth = Supabase.instance.client.auth;
-      if (_signup) {
+      if (_mode == _AuthMode.forgot) {
+        final email = _email.text.trim();
+        await auth.resetPasswordForEmail(
+          email,
+          redirectTo: Env.authRedirectUrl,
+        );
+        setState(() {
+          _forgotSuccessEmail = email;
+        });
+        return;
+      }
+
+      if (_mode == _AuthMode.signup) {
         final email = _email.text.trim();
         final response = await auth.signUp(
           email: email,
           password: _password.text,
-          emailRedirectTo: '${Env.normalizedApiBaseUrl.replaceAll('/api/v1', '')}/auth/callback',
+          emailRedirectTo: '${Env.siteUrl}/auth/callback',
           data: {
             'is_pattern_designer': _designer,
             if (_designer) 'display_name': _name.text.trim(),
@@ -101,7 +124,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
-  Widget _buildSignupSuccess() {
+  Widget _buildEmailSuccess({
+    required String title,
+    required String body,
+    required String hint,
+    required VoidCallback onBack,
+  }) {
     final titleStyle = Theme.of(context).textTheme.titleLarge?.copyWith(
       fontWeight: FontWeight.w700,
       color: AppColors.foreground,
@@ -121,23 +149,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           child: const Icon(Icons.mark_email_read_outlined, size: 32, color: AppColors.accent),
         ),
         const SizedBox(height: 24),
-        Text('Account created', style: titleStyle),
+        Text(title, style: titleStyle),
         const SizedBox(height: 12),
-        Text(
-          'We sent a confirmation link to $_signupSuccessEmail.',
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
+        Text(body, style: Theme.of(context).textTheme.bodyMedium),
         const SizedBox(height: 8),
         Text(
-          'Open that email and confirm your account, then come back here to log in.',
+          hint,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
         ),
         const SizedBox(height: 32),
-        FilledButton(
-          onPressed: _resetSignupSuccess,
-          child: const Text('Back to log in'),
-        ),
+        FilledButton(onPressed: onBack, child: const Text('Back to log in')),
       ],
+    );
+  }
+
+  Widget _buildSignupSuccess() {
+    return _buildEmailSuccess(
+      title: 'Account created',
+      body: 'We sent a confirmation link to $_signupSuccessEmail.',
+      hint: 'Open that email and confirm your account, then come back here to log in.',
+      onBack: _resetSignupSuccess,
+    );
+  }
+
+  Widget _buildForgotSuccess() {
+    return _buildEmailSuccess(
+      title: 'Check your email',
+      body: 'If an account exists for $_forgotSuccessEmail, we sent a password reset link.',
+      hint: 'Open the link in that email to choose a new password.',
+      onBack: _resetForgotSuccess,
     );
   }
 
@@ -146,29 +186,50 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (_signupSuccessEmail != null) {
       return _buildSignupSuccess();
     }
+    if (_forgotSuccessEmail != null) {
+      return _buildForgotSuccess();
+    }
 
     final titleStyle = Theme.of(context).textTheme.titleLarge?.copyWith(
       fontWeight: FontWeight.w700,
       color: AppColors.foreground,
     );
 
+    final title = switch (_mode) {
+      _AuthMode.login => 'Log in',
+      _AuthMode.signup => 'Create account',
+      _AuthMode.forgot => 'Reset password',
+    };
+
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Text(_signup ? 'Create account' : 'Log in', style: titleStyle),
+        Text(title, style: titleStyle),
         const SizedBox(height: 24),
-        OutlinedButton.icon(
-          onPressed: _loading ? null : _googleSignIn,
-          icon: const Icon(Icons.g_mobiledata, size: 28),
-          label: const Text('Continue with Google'),
+        if (_mode != _AuthMode.forgot) ...[
+          OutlinedButton.icon(
+            onPressed: _loading ? null : _googleSignIn,
+            icon: const Icon(Icons.g_mobiledata, size: 28),
+            label: const Text('Continue with Google'),
+          ),
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 24),
+        ],
+        TextField(
+          controller: _email,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(labelText: 'Email'),
         ),
-        const SizedBox(height: 24),
-        const Divider(),
-        const SizedBox(height: 24),
-        TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email')),
-        const SizedBox(height: 12),
-        TextField(controller: _password, obscureText: true, decoration: const InputDecoration(labelText: 'Password')),
-        if (_signup) ...[
+        if (_mode != _AuthMode.forgot) ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: _password,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'Password'),
+          ),
+        ],
+        if (_mode == _AuthMode.signup) ...[
           const SizedBox(height: 12),
           SwitchListTile(
             title: const Text('Register as a pattern designer'),
@@ -180,6 +241,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             TextField(controller: _name, decoration: const InputDecoration(labelText: 'Designer name')),
           ],
         ],
+        if (_mode == _AuthMode.login) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _loading
+                  ? null
+                  : () => setState(() {
+                      _mode = _AuthMode.forgot;
+                      _error = null;
+                    }),
+              child: const Text('Forgot password?'),
+            ),
+          ),
+        ],
         if (_error != null) ...[
           const SizedBox(height: 12),
           Text(_error!, style: const TextStyle(color: AppColors.destructive)),
@@ -187,16 +263,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         const SizedBox(height: 24),
         FilledButton(
           onPressed: _loading ? null : _submit,
-          child: Text(_loading ? 'Please wait…' : (_signup ? 'Sign up' : 'Log in')),
+          child: Text(
+            _loading
+                ? 'Please wait…'
+                : switch (_mode) {
+                    _AuthMode.login => 'Log in',
+                    _AuthMode.signup => 'Sign up',
+                    _AuthMode.forgot => 'Send reset link',
+                  },
+          ),
         ),
         TextButton(
           onPressed: _loading
               ? null
               : () => setState(() {
-                  _signup = !_signup;
+                  if (_mode == _AuthMode.forgot) {
+                    _mode = _AuthMode.login;
+                  } else {
+                    _mode = _mode == _AuthMode.signup ? _AuthMode.login : _AuthMode.signup;
+                  }
                   _error = null;
                 }),
-          child: Text(_signup ? 'Already have an account? Log in' : 'New here? Create an account'),
+          child: Text(
+            switch (_mode) {
+              _AuthMode.login => 'New here? Create an account',
+              _AuthMode.signup => 'Already have an account? Log in',
+              _AuthMode.forgot => 'Back to log in',
+            },
+          ),
         ),
       ],
     );
