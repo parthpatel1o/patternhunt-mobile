@@ -165,12 +165,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Widget _buildSignupSuccess() {
-    return _buildEmailSuccess(
-      title: 'Almost there',
-      body: 'We sent a confirmation link to $_signupSuccessEmail.',
-      hint: 'Open that email and tap the link to confirm your address and log in to PatternHunt.',
-      onBack: _resetSignupSuccess,
-      buttonLabel: 'Got it',
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        const SizedBox(height: 16),
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: const Icon(Icons.mark_email_read_outlined, size: 32, color: AppColors.accent),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Check your email',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: AppColors.foreground,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'We sent a confirmation link to $_signupSuccessEmail. Tap it to confirm and log in.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 32),
+        FilledButton(onPressed: _resetSignupSuccess, child: const Text('Got it')),
+      ],
     );
   }
 
