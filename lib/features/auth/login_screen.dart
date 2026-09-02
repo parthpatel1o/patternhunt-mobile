@@ -75,7 +75,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         final response = await auth.signUp(
           email: email,
           password: _password.text,
-          emailRedirectTo: '${Env.siteUrl}/auth/callback',
+          emailRedirectTo: '${Env.siteUrl}/auth/callback?next=${Uri.encodeComponent('/')}&welcome=1',
           data: {
             'is_pattern_designer': _designer,
             if (_designer) 'display_name': _name.text.trim(),
@@ -129,6 +129,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     required String body,
     required String hint,
     required VoidCallback onBack,
+    String buttonLabel = 'Back to log in',
   }) {
     final titleStyle = Theme.of(context).textTheme.titleLarge?.copyWith(
       fontWeight: FontWeight.w700,
@@ -158,17 +159,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
         ),
         const SizedBox(height: 32),
-        FilledButton(onPressed: onBack, child: const Text('Back to log in')),
+        FilledButton(onPressed: onBack, child: Text(buttonLabel)),
       ],
     );
   }
 
   Widget _buildSignupSuccess() {
     return _buildEmailSuccess(
-      title: 'Account created',
+      title: 'Almost there',
       body: 'We sent a confirmation link to $_signupSuccessEmail.',
-      hint: 'Open that email and confirm your account, then come back here to log in.',
+      hint: 'Open that email and tap the link to confirm your address and log in to PatternHunt.',
       onBack: _resetSignupSuccess,
+      buttonLabel: 'Got it',
     );
   }
 
