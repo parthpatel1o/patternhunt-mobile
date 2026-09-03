@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -8,12 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
-import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/api/api_client.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers/providers.dart';
-import '../../core/theme/app_colors.dart';
 
 class SubmitScreen extends ConsumerStatefulWidget {
   const SubmitScreen({super.key});
@@ -32,9 +29,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
   bool _uploading = false;
   bool _preparing = false;
 
-  static const _aspectTolerance = 0.08;
   static const _jpegQuality = 82;
-  static const _maxPayloadBytes = 4 * 1024 * 1024;
 
   @override
   void initState() {
@@ -49,70 +44,34 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     super.dispose();
   }
 
-  Future<File> _compressSquare(File file, {img.Image? decoded}) async {
+  /// Fit the photo inside a fixed square with white letterboxing (no cropping).
+  Future<File> _fitInSquare(File file, {img.Image? decoded}) async {
     final bytes = decoded == null ? await file.readAsBytes() : null;
     final image = decoded ?? img.decodeImage(bytes!);
     if (image == null) return file;
 
-    final side = math.min(image.width, image.height);
-    final sx = ((image.width - side) / 2).floor();
-    final sy = ((image.height - side) / 2).floor();
-    final square = img.copyCrop(image, x: sx, y: sy, width: side, height: side);
     final size = AppConstants.instance.imageOutputSize;
+    final canvas = img.Image(width: size, height: size);
+    img.fill(canvas, color: img.ColorRgb8(255, 255, 255));
+
+    final scale = math.min(size / image.width, size / image.height);
+    final drawWidth = math.max(1, (image.width * scale).round());
+    final drawHeight = math.max(1, (image.height * scale).round());
     final resized = img.copyResize(
-      square,
-      width: size,
-      height: size,
+      image,
+      width: drawWidth,
+      height: drawHeight,
       interpolation: img.Interpolation.linear,
     );
+    final dx = ((size - drawWidth) / 2).round();
+    final dy = ((size - drawHeight) / 2).round();
+    img.compositeImage(canvas, resized, dstX: dx, dstY: dy);
 
     final out = File(
       '${Directory.systemTemp.path}/pattern_${DateTime.now().microsecondsSinceEpoch}_${math.Random().nextInt(1 << 20)}.jpg',
     );
-    await out.writeAsBytes(img.encodeJpg(resized, quality: _jpegQuality));
+    await out.writeAsBytes(img.encodeJpg(canvas, quality: _jpegQuality));
     return out;
-  }
-
-  bool _isNearlySquare(img.Image image) {
-    if (image.width == 0 || image.height == 0) return false;
-    return (image.width / image.height - 1).abs() <= _aspectTolerance;
-  }
-
-  Future<File?> _cropSquare(String path) async {
-    final cropped = await ImageCropper().cropImage(
-      sourcePath: path,
-      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-      compressFormat: ImageCompressFormat.jpg,
-      compressQuality: _jpegQuality,
-      uiSettings: [
-        AndroidUiSettings(
-          toolbarTitle: 'Crop photo',
-          toolbarColor: AppColors.accent,
-          toolbarWidgetColor: Colors.white,
-          activeControlsWidgetColor: AppColors.accent,
-          initAspectRatio: CropAspectRatioPreset.square,
-          lockAspectRatio: true,
-          aspectRatioPresets: const [CropAspectRatioPreset.square],
-          cropStyle: CropStyle.rectangle,
-          showCropGrid: true,
-          hideBottomControls: false,
-          cropFrameStrokeWidth: 3,
-          cropGridStrokeWidth: 1,
-        ),
-        IOSUiSettings(
-          title: 'Crop photo',
-          aspectRatioLockEnabled: true,
-          resetAspectRatioEnabled: false,
-          aspectRatioPickerButtonHidden: true,
-          rotateButtonsHidden: true,
-          rotateClockwiseButtonHidden: true,
-          aspectRatioPresets: const [CropAspectRatioPreset.square],
-          minimumAspectRatio: 1,
-        ),
-      ],
-    );
-    if (cropped == null) return null;
-    return File(cropped.path);
   }
 
   Future<void> _pickImages() async {
@@ -135,29 +94,20 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
 
     setState(() => _preparing = true);
     try {
-      final prepared = <File>[];
-      for (final xfile in picked) {
-        if (_images.length + prepared.length >= max) break;
+      final limited = picked.take(remaining).toList();
+      final results = await Future.wait(limited.map((xfile) async {
         final source = File(xfile.path);
         final bytes = await source.readAsBytes();
         final decoded = img.decodeImage(bytes);
-        if (decoded == null) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('We couldn’t read one of those images.')),
-            );
-          }
-          continue;
-        }
+        if (decoded == null) return null;
+        return _fitInSquare(source, decoded: decoded);
+      }));
 
-        File? working = source;
-        if (!_isNearlySquare(decoded)) {
-          working = await _cropSquare(source.path);
-          if (working == null) continue;
-        }
-
-        final compressed = await _compressSquare(working);
-        prepared.add(compressed);
+      final prepared = results.whereType<File>().toList();
+      if (prepared.length < limited.length && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('We couldn’t read one of those images.')),
+        );
       }
       if (!mounted) return;
       setState(() => _images.addAll(prepared));
@@ -181,36 +131,70 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     setState(() => _pdf = file);
   }
 
+  Future<void> _putToSignedUrl(String url, File file, String contentType) async {
+    final bytes = await file.readAsBytes();
+    final response = await Dio().put<List<int>>(
+      url,
+      data: bytes,
+      options: Options(
+        headers: {'Content-Type': contentType},
+        contentType: contentType,
+        followRedirects: false,
+        validateStatus: (status) => status != null && status < 500,
+      ),
+    );
+    if (response.statusCode == null || response.statusCode! >= 300) {
+      throw ApiException('Upload failed (${response.statusCode ?? 'unknown'}).');
+    }
+  }
+
   Future<void> _submit() async {
-    var payloadBytes = utf8.encode(_title.text).length + utf8.encode(_url.text).length + 64;
-    for (final image in _images) {
-      payloadBytes += await image.length();
-    }
-    if (_pdf != null) payloadBytes += await _pdf!.length();
-    if (payloadBytes > _maxPayloadBytes) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Those files are too large to upload together. Remove a photo or PDF.'),
-          ),
-        );
-      }
-      return;
-    }
+    if (_images.isEmpty) return;
 
     setState(() => _uploading = true);
     try {
-      final form = FormData.fromMap({
+      final api = ref.read(apiClientProvider);
+      final urls = await api.post('/patterns/upload-urls', data: {
+        'imageCount': _images.length,
+        'hasPdf': _pdf != null,
+      });
+
+      final imageSlots = (urls['images'] as List<dynamic>? ?? [])
+          .map((e) => e as Map<String, dynamic>)
+          .toList();
+      final pdfSlot = urls['pdf'] as Map<String, dynamic>?;
+      if (imageSlots.length != _images.length) {
+        throw ApiException('Could not prepare image uploads.');
+      }
+      if (_pdf != null && pdfSlot == null) {
+        throw ApiException('Could not prepare PDF upload.');
+      }
+
+      await Future.wait([
+        for (var i = 0; i < imageSlots.length; i++)
+          _putToSignedUrl(
+            imageSlots[i]['uploadUrl'] as String,
+            _images[i],
+            imageSlots[i]['contentType'] as String? ?? 'image/jpeg',
+          ),
+        if (_pdf != null && pdfSlot != null)
+          _putToSignedUrl(
+            pdfSlot['uploadUrl'] as String,
+            _pdf!,
+            pdfSlot['contentType'] as String? ?? 'application/pdf',
+          ),
+      ]);
+
+      await api.post('/patterns', data: {
+        'patternId': urls['patternId'],
         'title': _title.text.trim(),
         'patternUrl': _url.text.trim(),
-        'isFree': _isFree.toString(),
+        'isFree': _isFree,
         'categorySlug': _category,
-        'images': await Future.wait(
-          _images.map((f) async => MultipartFile.fromFile(f.path, filename: f.path.split('/').last)),
-        ),
-        if (_pdf != null) 'pdf': await MultipartFile.fromFile(_pdf!.path, filename: _pdf!.path.split('/').last),
+        'imageKeys': imageSlots.map((s) => s['key']).toList(),
+        'pdfKey': pdfSlot?['key'],
       });
-      await ref.read(apiClientProvider).postMultipart('/patterns', form);
+
       ref.invalidate(myPatternsProvider);
       ref.invalidate(patternsProvider);
       if (mounted) {
@@ -219,6 +203,12 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
       }
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Upload failed. Please try again.')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -292,7 +282,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
           const SizedBox(height: 8),
         ],
         Text(
-          'Photos are compressed to about ${AppConstants.instance.imageOutputSize}×${AppConstants.instance.imageOutputSize}. Non-square photos open a crop first.',
+          'Choose one or more photos. Square photos preferred.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 8),
@@ -305,7 +295,10 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.file(_images[i], width: 72, height: 72, fit: BoxFit.cover),
+                    child: ColoredBox(
+                      color: Colors.white,
+                      child: Image.file(_images[i], width: 72, height: 72, fit: BoxFit.contain),
+                    ),
                   ),
                   Positioned(
                     right: 0,

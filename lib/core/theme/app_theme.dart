@@ -12,7 +12,7 @@ class AppTheme {
         surface: AppColors.background,
         onSurface: AppColors.foreground,
         primary: AppColors.primary,
-        onPrimary: AppColors.foreground,
+        onPrimary: AppColors.primaryForeground,
         secondary: AppColors.accent,
         onSecondary: AppColors.accentForeground,
         error: AppColors.destructive,
@@ -31,28 +31,9 @@ class AppTheme {
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.card,
         indicatorColor: AppColors.primary,
-        iconTheme: WidgetStateProperty.resolveWith((states) {
-          return IconThemeData(
-            color: states.contains(WidgetState.selected) ? AppColors.foreground : AppColors.muted,
-          );
-        }),
-        labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          return textTheme.labelMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: states.contains(WidgetState.selected) ? AppColors.foreground : AppColors.muted,
-          );
-        }),
-      ),
-      chipTheme: ChipThemeData(
-        backgroundColor: AppColors.card,
-        selectedColor: AppColors.primary,
-        checkmarkColor: AppColors.foreground,
-        labelStyle: const TextStyle(color: AppColors.foreground),
-        secondaryLabelStyle: const TextStyle(color: AppColors.foreground),
-        side: const BorderSide(color: AppColors.border),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+        labelTextStyle: WidgetStatePropertyAll(
+          textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+        ),
       ),
       cardTheme: CardThemeData(
         color: AppColors.card,
@@ -76,20 +57,6 @@ class AppTheme {
           foregroundColor: AppColors.accentForeground,
           shape: const StadiumBorder(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-      ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.foreground,
-          side: const BorderSide(color: AppColors.border),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-      ),
-      textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          foregroundColor: AppColors.accent,
           textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
