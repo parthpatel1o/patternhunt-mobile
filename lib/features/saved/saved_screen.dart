@@ -40,7 +40,7 @@ class SavedScreen extends ConsumerWidget {
                       leading: thumb != null
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: Image.network(thumb, width: 48, height: 48, fit: BoxFit.cover),
+                              child: Image.network(thumb, width: 48, height: 48, fit: BoxFit.contain),
                             )
                           : const Icon(Icons.folder_outlined),
                       title: Text(group.board.name),

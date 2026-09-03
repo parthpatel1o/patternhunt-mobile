@@ -61,6 +61,10 @@ class MineScreen extends ConsumerWidget {
                         onSelected: (value) async {
                           final api = ref.read(apiClientProvider);
                           try {
+                            if (value == 'edit') {
+                              if (context.mounted) context.push('/mine/${pattern.id}/edit');
+                              return;
+                            }
                             if (value == 'archive') {
                               await api.patch('/me/patterns/${pattern.id}/archive', {'archived': !pattern.isArchived});
                             } else if (value == 'delete') {
@@ -85,6 +89,7 @@ class MineScreen extends ConsumerWidget {
                           }
                         },
                         itemBuilder: (context) => [
+                          const PopupMenuItem(value: 'edit', child: Text('Edit')),
                           PopupMenuItem(
                             value: 'archive',
                             child: Text(pattern.isArchived ? 'Unarchive' : 'Archive'),

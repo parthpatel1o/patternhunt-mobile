@@ -8,6 +8,7 @@ import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import 'photo_viewer.dart';
 import 'save_board_sheet.dart';
 
 class PatternCardWidget extends ConsumerStatefulWidget {
@@ -148,85 +149,104 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
         borderRadius: BorderRadius.circular(22),
         side: BorderSide(color: border, width: widget.rank <= 2 ? 2 : 1),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: () => context.push('/pattern/${pattern.id}'),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: CachedNetworkImage(
-                      imageUrl: pattern.imageUrls.first,
-                      width: 96,
-                      height: 96,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  Positioned(
-                    top: 6,
-                    left: 6,
-                    child: CircleAvatar(
-                      radius: 14,
-                      backgroundColor: widget.rank <= 3 ? AppColors.primaryStrong : AppColors.card,
-                      child: Text('${widget.rank}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => showNetworkPhotoViewer(
+                  context,
+                  imageUrls: pattern.imageUrls,
+                ),
+                child: Stack(
                   children: [
-                    Text(pattern.title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 4),
-                    Text(pattern.designerName, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted)),
-                    const SizedBox(height: 8),
-                    Row(
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: ColoredBox(
+                        color: bg,
+                        child: CachedNetworkImage(
+                          imageUrl: pattern.imageUrls.first,
+                          width: 96,
+                          height: 96,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      child: CircleAvatar(
+                        radius: 14,
+                        backgroundColor: widget.rank <= 3 ? AppColors.primaryStrong : AppColors.card,
+                        child: Text('${widget.rank}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => context.push('/pattern/${pattern.id}'),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Text(pattern.title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 4),
+                        Text(pattern.designerName, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted)),
+                        const SizedBox(height: 8),
                         Chip(
                           label: Text(pattern.isFree ? 'Free' : 'Paid'),
                           visualDensity: VisualDensity.compact,
                           backgroundColor: AppColors.primary.withValues(alpha: 0.35),
                         ),
-                        const Spacer(),
-                        IconButton(
-                          onPressed: _saving ? null : _toggleSave,
-                          onLongPress: _saving ? null : _openSaveSheet,
-                          icon: Icon(
-                            _saved ? Icons.bookmark : Icons.bookmark_outline,
-                            color: _saved ? AppColors.accent : AppColors.muted,
-                          ),
-                          tooltip: _saved ? 'Saved' : 'Save',
-                        ),
-                        FilledButton.tonal(
-                          onPressed: _voting ? null : _toggleVote,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: _voted ? AppColors.accent : AppColors.card,
-                            foregroundColor: _voted ? AppColors.accentForeground : AppColors.accent,
-                            shape: const StadiumBorder(),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.arrow_upward, size: 18, color: _voted ? AppColors.accentForeground : AppColors.accent),
-                              const SizedBox(width: 4),
-                              Text('$_voteCount'),
-                            ],
-                          ),
-                        ).animate(target: _voted ? 1 : 0).scale(begin: const Offset(1, 1), end: const Offset(1.08, 1.08), duration: 280.ms),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Spacer(),
+                      IconButton(
+                        onPressed: _saving ? null : _toggleSave,
+                        onLongPress: _saving ? null : _openSaveSheet,
+                        icon: Icon(
+                          _saved ? Icons.bookmark : Icons.bookmark_outline,
+                          color: _saved ? AppColors.accent : AppColors.muted,
+                        ),
+                        tooltip: _saved ? 'Saved' : 'Save',
+                      ),
+                      FilledButton.tonal(
+                        onPressed: _voting ? null : _toggleVote,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _voted ? AppColors.accent : AppColors.card,
+                          foregroundColor: _voted ? AppColors.accentForeground : AppColors.accent,
+                          shape: const StadiumBorder(),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.arrow_upward, size: 18, color: _voted ? AppColors.accentForeground : AppColors.accent),
+                            const SizedBox(width: 4),
+                            Text('$_voteCount'),
+                          ],
+                        ),
+                      ).animate(target: _voted ? 1 : 0).scale(begin: const Offset(1, 1), end: const Offset(1.08, 1.08), duration: 280.ms),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.05, end: 0);

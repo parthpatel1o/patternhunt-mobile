@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
+import '../../core/theme/app_colors.dart';
 
 class BoardDetailScreen extends ConsumerWidget {
   const BoardDetailScreen({super.key, required this.boardId});
@@ -75,9 +76,12 @@ class BoardDetailScreen extends ConsumerWidget {
                             Expanded(
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(16),
-                                child: CachedNetworkImage(
-                                  imageUrl: pattern.imageUrls.first,
-                                  fit: BoxFit.cover,
+                                child: ColoredBox(
+                                  color: AppColors.card,
+                                  child: CachedNetworkImage(
+                                    imageUrl: pattern.imageUrls.first,
+                                    fit: BoxFit.contain,
+                                  ),
                                 ),
                               ),
                             ),

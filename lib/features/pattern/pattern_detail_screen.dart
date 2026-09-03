@@ -7,6 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
+import '../../core/theme/app_colors.dart';
+import '../../shared/widgets/photo_viewer.dart';
 import '../../shared/widgets/save_board_sheet.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 
@@ -75,9 +77,22 @@ class _PatternDetailScreenState extends ConsumerState<PatternDetailScreen> {
                 height: 320,
                 child: PageView.builder(
                   itemCount: pattern.imageUrls.length,
-                  itemBuilder: (context, index) => ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: CachedNetworkImage(imageUrl: pattern.imageUrls[index], fit: BoxFit.cover),
+                  itemBuilder: (context, index) => GestureDetector(
+                    onTap: () => showNetworkPhotoViewer(
+                      context,
+                      imageUrls: pattern.imageUrls,
+                      initialIndex: index,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: ColoredBox(
+                        color: AppColors.card,
+                        child: CachedNetworkImage(
+                          imageUrl: pattern.imageUrls[index],
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
