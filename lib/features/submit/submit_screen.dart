@@ -116,6 +116,13 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     }
   }
 
+  void _reorderImage(int oldIndex, int newIndex) {
+    setState(() {
+      final item = _images.removeAt(oldIndex);
+      _images.insert(newIndex, item);
+    });
+  }
+
   Future<void> _pickPdf() async {
     if (!_isFree) return;
     final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
@@ -282,49 +289,90 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
           const SizedBox(height: 8),
         ],
         Text(
-          'Choose one or more photos. Square photos preferred.',
+          _images.length > 1
+              ? 'Choose one or more photos. Long-press and drag to reorder — the first photo is the cover.'
+              : 'Choose one or more photos. Square photos preferred.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (var i = 0; i < _images.length; i++)
-              Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: ColoredBox(
-                      color: Colors.white,
-                      child: Image.file(_images[i], width: 72, height: 72, fit: BoxFit.contain),
+        if (_images.isNotEmpty) ...[
+          SizedBox(
+            height: 96,
+            child: ReorderableListView.builder(
+              scrollDirection: Axis.horizontal,
+              buildDefaultDragHandles: false,
+              itemCount: _images.length,
+              onReorderItem: _reorderImage,
+              proxyDecorator: (child, index, animation) {
+                return Material(
+                  elevation: 4,
+                  borderRadius: BorderRadius.circular(12),
+                  child: child,
+                );
+              },
+              itemBuilder: (context, i) {
+                final file = _images[i];
+                return ReorderableDelayedDragStartListener(
+                  key: ValueKey(file.path),
+                  index: i,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: ColoredBox(
+                              color: Colors.white,
+                              child: Image.file(file, width: 80, height: 80, fit: BoxFit.contain),
+                            ),
+                          ),
+                          if (i == 0)
+                            Positioned(
+                              left: 4,
+                              top: 4,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text('Cover', style: Theme.of(context).textTheme.labelSmall),
+                              ),
+                            ),
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            child: IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                              icon: const Icon(Icons.close, size: 16),
+                              onPressed: () => setState(() => _images.removeAt(i)),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: IconButton(
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-                      icon: const Icon(Icons.close, size: 16),
-                      onPressed: () => setState(() => _images.removeAt(i)),
-                    ),
-                  ),
-                ],
-              ),
-            OutlinedButton.icon(
-              onPressed: _preparing || _uploading ? null : _pickImages,
-              icon: _preparing
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.add_a_photo),
-              label: Text(
-                _preparing
-                    ? 'Preparing…'
-                    : 'Add photos (${_images.length}/${AppConstants.instance.maxPatternImages})',
-              ),
+                );
+              },
             ),
-          ],
+          ),
+          const SizedBox(height: 8),
+        ],
+        OutlinedButton.icon(
+          onPressed: _preparing || _uploading ? null : _pickImages,
+          icon: _preparing
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.add_a_photo),
+          label: Text(
+            _preparing
+                ? 'Preparing…'
+                : 'Add photos (${_images.length}/${AppConstants.instance.maxPatternImages})',
+          ),
         ),
         const SizedBox(height: 24),
         FilledButton(
