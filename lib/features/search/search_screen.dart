@@ -35,9 +35,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final query = PatternQuery(q: _query);
     final patternsAsync = _query.isEmpty
-        ? const AsyncValue<List<PatternCard>>.data([])
-        : ref.watch(patternsProvider(PatternQuery(q: _query)));
+        ? const AsyncValue<PatternsPage>.data(
+            PatternsPage(patterns: [], hasMore: false, nextOffset: null),
+          )
+        : ref.watch(patternsProvider(query));
 
     return Scaffold(
       appBar: AppBar(
@@ -55,18 +58,33 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           children: const [PatternCardSkeleton(), SizedBox(height: 12), PatternCardSkeleton()],
         ),
         error: (e, _) => Center(child: Text('$e')),
-        data: (patterns) {
+        data: (page) {
           if (_query.isEmpty) {
             return const Center(child: Text('Search by pattern title or designer name'));
           }
-          if (patterns.isEmpty) return const Center(child: Text('No results'));
+          if (page.patterns.isEmpty) return const Center(child: Text('No results'));
           return ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: patterns.length,
-            itemBuilder: (context, index) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: PatternCardWidget(pattern: patterns[index], rank: index + 1),
-            ),
+            itemCount: page.patterns.length + (page.hasMore ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index >= page.patterns.length) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Center(
+                    child: page.loadingMore
+                        ? const CircularProgressIndicator()
+                        : TextButton(
+                            onPressed: () => ref.read(patternsProvider(query).notifier).loadMore(),
+                            child: const Text('Load more'),
+                          ),
+                  ),
+                );
+              }
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: PatternCardWidget(pattern: page.patterns[index], rank: index + 1),
+              );
+            },
           );
         },
       ),

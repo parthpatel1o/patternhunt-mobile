@@ -48,6 +48,44 @@ class PatternCard {
   }
 }
 
+class PatternsPage {
+  final List<PatternCard> patterns;
+  final bool hasMore;
+  final int? nextOffset;
+  final bool loadingMore;
+
+  const PatternsPage({
+    required this.patterns,
+    required this.hasMore,
+    required this.nextOffset,
+    this.loadingMore = false,
+  });
+
+  factory PatternsPage.fromJson(Map<String, dynamic> json) {
+    return PatternsPage(
+      patterns: (json['patterns'] as List<dynamic>)
+          .map((e) => PatternCard.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      hasMore: json['hasMore'] as bool? ?? false,
+      nextOffset: json['nextOffset'] as int?,
+    );
+  }
+
+  PatternsPage copyWith({
+    List<PatternCard>? patterns,
+    bool? hasMore,
+    int? nextOffset,
+    bool? loadingMore,
+  }) {
+    return PatternsPage(
+      patterns: patterns ?? this.patterns,
+      hasMore: hasMore ?? this.hasMore,
+      nextOffset: nextOffset ?? this.nextOffset,
+      loadingMore: loadingMore ?? this.loadingMore,
+    );
+  }
+}
+
 class UserProfile {
   final String id;
   final String? displayName;

@@ -23,6 +23,7 @@ class AppConstants {
     required this.defaultRankBoardCategory,
     required this.defaultUserCategory,
     required this.maxPatternImages,
+    required this.scoreboardPageSize,
     required this.imageOutputSize,
     required this.maxPdfBytes,
   });
@@ -32,6 +33,7 @@ class AppConstants {
   final String defaultRankBoardCategory;
   final String defaultUserCategory;
   final int maxPatternImages;
+  final int scoreboardPageSize;
   final int imageOutputSize;
   final int maxPdfBytes;
 
@@ -56,6 +58,7 @@ class AppConstants {
       defaultRankBoardCategory: json['defaultRankBoardCategory'] as String,
       defaultUserCategory: json['defaultUserCategory'] as String,
       maxPatternImages: json['maxPatternImages'] as int,
+      scoreboardPageSize: json['scoreboardPageSize'] as int? ?? 20,
       imageOutputSize: json['imageOutputSize'] as int,
       maxPdfBytes: json['maxPdfBytes'] as int,
     );

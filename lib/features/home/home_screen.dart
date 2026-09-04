@@ -107,17 +107,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: Text('Could not load patterns\n$e', textAlign: TextAlign.center),
               ),
             ),
-            data: (patterns) {
-              if (patterns.isEmpty) {
+            data: (page) {
+              if (page.patterns.isEmpty) {
                 return HomeEmptyState(categoryName: _categoryLabel(constants));
               }
               return Column(
                 children: [
-                  for (var i = 0; i < patterns.length; i++) ...[
+                  for (var i = 0; i < page.patterns.length; i++) ...[
                     RepaintBoundary(
-                      child: PatternCardWidget(pattern: patterns[i], rank: i + 1, rankPeriod: period),
+                      child: PatternCardWidget(
+                        pattern: page.patterns[i],
+                        rank: i + 1,
+                        rankPeriod: period,
+                      ),
                     ),
                     const SizedBox(height: 12),
+                  ],
+                  if (page.hasMore) ...[
+                    const SizedBox(height: 8),
+                    Center(
+                      child: page.loadingMore
+                          ? const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: CircularProgressIndicator(),
+                            )
+                          : TextButton(
+                              onPressed: () => ref.read(patternsProvider(query).notifier).loadMore(),
+                              child: const Text('Load more'),
+                            ),
+                    ),
                   ],
                 ],
               );
