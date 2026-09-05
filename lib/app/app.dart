@@ -18,7 +18,7 @@ class PatternHuntApp extends ConsumerWidget {
 
     ref.read(pendingSignupWelcomeProvider.notifier).state = false;
     scaffoldMessengerKey.currentState?.showSnackBar(
-      const SnackBar(content: Text('Email confirmed — welcome to PatternHunt!')),
+      const SnackBar(content: Text('Email confirmed — welcome to Pattern Hunt!')),
     );
   }
 
@@ -40,7 +40,7 @@ class PatternHuntApp extends ConsumerWidget {
     });
 
     return MaterialApp.router(
-      title: 'PatternHunt',
+      title: 'Pattern Hunt',
       theme: AppTheme.light(),
       routerConfig: router,
       scaffoldMessengerKey: scaffoldMessengerKey,

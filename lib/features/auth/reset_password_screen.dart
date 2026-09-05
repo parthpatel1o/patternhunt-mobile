@@ -66,7 +66,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
         Text('Choose a new password', style: titleStyle),
         const SizedBox(height: 8),
         Text(
-          'Enter a new password for your PatternHunt account.',
+          'Enter a new password for your Pattern Hunt account.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
         ),
         const SizedBox(height: 24),

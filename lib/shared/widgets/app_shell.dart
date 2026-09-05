@@ -10,27 +10,42 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(sessionProvider);
     final profile = ref.watch(profileProvider).valueOrNull;
     final location = GoRouterState.of(context).uri.path;
-    final isDesigner = profile?.isPatternDesigner ?? false;
-
-    int selectedIndex = 0;
-    if (location.startsWith('/saved')) selectedIndex = 1;
-    if (location.startsWith('/submit')) selectedIndex = 2;
-    if (location.startsWith('/profile') || location.startsWith('/login')) {
-      selectedIndex = isDesigner ? 3 : 2;
-    }
+    final isLoggedIn = session != null;
+    final isDesigner = isLoggedIn && (profile?.isPatternDesigner ?? false);
 
     final destinations = <NavigationDestination>[
       const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-      const NavigationDestination(icon: Icon(Icons.bookmark_outline), selectedIcon: Icon(Icons.bookmark), label: 'Saved'),
+      if (isLoggedIn)
+        const NavigationDestination(icon: Icon(Icons.bookmark_outline), selectedIcon: Icon(Icons.bookmark), label: 'Saved'),
       if (isDesigner)
         const NavigationDestination(icon: Icon(Icons.add_circle_outline), selectedIcon: Icon(Icons.add_circle), label: 'Submit'),
       const NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
     ];
 
+    final routes = <String>[
+      '/',
+      if (isLoggedIn) '/saved',
+      if (isDesigner) '/submit',
+      '/profile',
+    ];
+
+    int selectedIndex = 0;
+    for (var i = 0; i < routes.length; i++) {
+      final route = routes[i];
+      if (route == '/') {
+        if (location == '/' || location.isEmpty) selectedIndex = i;
+      } else if (location.startsWith(route)) {
+        selectedIndex = i;
+      }
+    }
+    if (location.startsWith('/login') || location.startsWith('/reset-password')) {
+      selectedIndex = routes.indexOf('/profile');
+    }
+
     void onTap(int index) {
-      final routes = <String>['/', '/saved', if (isDesigner) '/submit', '/profile'];
       context.go(routes[index]);
     }
 
@@ -40,7 +55,7 @@ class AppShell extends ConsumerWidget {
           children: [
             Image.asset('assets/logo.png', width: 28, height: 28),
             const SizedBox(width: 4),
-            const Text('PatternHunt'),
+            const Text('Pattern Hunt'),
           ],
         ),
         actions: [
