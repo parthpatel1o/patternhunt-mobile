@@ -11,6 +11,7 @@ import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/photo_viewer.dart';
 import '../../shared/widgets/save_board_sheet.dart';
 import '../../shared/widgets/skeleton_loader.dart';
+import '../../shared/widgets/in_app_webview.dart';
 
 String slugifyDesigner(String name) {
   return name
@@ -134,7 +135,11 @@ class _PatternDetailScreenState extends ConsumerState<PatternDetailScreen> {
               const SizedBox(height: 16),
               if (pattern.patternUrl != null)
                 FilledButton.tonal(
-                  onPressed: () => launchUrl(Uri.parse(pattern.patternUrl!)),
+                  onPressed: () => openInAppWebView(
+                    context,
+                    url: pattern.patternUrl!,
+                    title: pattern.title,
+                  ),
                   child: const Text('Open pattern link'),
                 ),
               if (pattern.hasPdf) ...[

@@ -6,6 +6,7 @@ import '../../core/auth/signup_welcome.dart';
 import '../../core/config/env.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../shared/widgets/google_logo.dart';
 
 enum _AuthMode { login, signup, forgot }
 
@@ -238,7 +239,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         if (_mode != _AuthMode.forgot) ...[
           OutlinedButton.icon(
             onPressed: _loading ? null : _googleSignIn,
-            icon: const Icon(Icons.g_mobiledata, size: 28),
+            icon: const GoogleLogo(size: 20),
             label: const Text('Continue with Google'),
           ),
           const SizedBox(height: 24),
@@ -271,9 +272,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ],
         ],
         if (_mode == _AuthMode.login) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Align(
-            alignment: Alignment.centerRight,
+            alignment: Alignment.centerLeft,
             child: TextButton(
               onPressed: _loading
                   ? null
@@ -281,6 +282,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       _mode = _AuthMode.forgot;
                       _error = null;
                     }),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
               child: const Text('Forgot password?'),
             ),
           ),

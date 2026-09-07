@@ -1,27 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/api/api_client.dart';
-import '../../core/constants/app_constants.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 
-class SettingsScreen extends ConsumerStatefulWidget {
-  const SettingsScreen({super.key});
+class ProfileScreen extends ConsumerStatefulWidget {
+  const ProfileScreen({super.key});
 
   @override
-  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  String _category = 'all';
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  final _name = TextEditingController();
+  bool _designer = false;
   bool _saving = false;
   bool _synced = false;
 
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
   void _syncFromProfile(UserProfile profile) {
-    _category = profile.defaultCategorySlug ?? 'all';
+    _name.text = profile.displayName ?? '';
+    _designer = profile.isPatternDesigner;
     _synced = true;
   }
 
@@ -35,12 +41,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: [
           Text(
-            'Settings',
+            'Profile',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
           Text(
-            'Log in to update your preferences.',
+            'Log in to manage your designer profile and account.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
           ),
           const SizedBox(height: 24),
@@ -64,37 +70,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           children: [
             Text(
-              'Settings',
+              'Profile',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
+            if (profile?.email != null) ...[
+              const SizedBox(height: 8),
+              Text(profile!.email!, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted)),
+            ],
             const SizedBox(height: 20),
-            InputDecorator(
-              decoration: const InputDecoration(labelText: 'Default category'),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _category,
-                  isExpanded: true,
-                  items: [
-                    const DropdownMenuItem(value: 'all', child: Text('All categories')),
-                    for (final c in AppConstants.instance.categories)
-                      DropdownMenuItem(value: c.slug, child: Text(c.name)),
-                  ],
-                  onChanged: (v) => setState(() => _category = v ?? 'all'),
-                ),
+            if (profile != null && !profile.hasSubmittedPatterns)
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Register as a pattern designer'),
+                value: _designer,
+                onChanged: (v) => setState(() => _designer = v),
               ),
-            ),
+            if (_designer || (profile?.hasSubmittedPatterns ?? false)) ...[
+              const SizedBox(height: 8),
+              TextField(controller: _name, decoration: const InputDecoration(labelText: 'Designer name')),
+            ],
             const SizedBox(height: 24),
             FilledButton(
               onPressed: _saving ? null : () => _save(profile),
-              child: Text(_saving ? 'Saving…' : 'Save settings'),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () async {
-                await Supabase.instance.client.auth.signOut();
-                if (context.mounted) context.go('/login');
-              },
-              child: const Text('Log out'),
+              child: Text(_saving ? 'Saving…' : 'Save profile'),
             ),
           ],
         );
@@ -106,12 +104,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _saving = true);
     try {
       await ref.read(apiClientProvider).patch('/me/settings', {
-        'defaultCategorySlug': _category,
-        if (profile != null) 'displayName': profile.displayName ?? '',
-        if (profile != null) 'isPatternDesigner': profile.isPatternDesigner,
+        'displayName': _name.text.trim(),
+        'isPatternDesigner': profile?.hasSubmittedPatterns == true ? true : _designer,
       });
       ref.invalidate(profileProvider);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings saved')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile saved')));
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {

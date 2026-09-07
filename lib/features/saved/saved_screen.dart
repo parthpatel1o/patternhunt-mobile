@@ -18,7 +18,7 @@ class SavedScreen extends ConsumerWidget {
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(boardsWithPatternsProvider),
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
             children: [
               FilledButton.tonalIcon(
                 onPressed: () => _createBoard(context, ref),

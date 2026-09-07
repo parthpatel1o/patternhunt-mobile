@@ -38,6 +38,14 @@ void showAccountMenu(BuildContext context, WidgetRef ref) {
                 context.go('/profile');
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('Settings'),
+              onTap: () {
+                Navigator.pop(context);
+                context.go('/settings');
+              },
+            ),
             if (session == null)
               ListTile(
                 leading: const Icon(Icons.login),

@@ -50,27 +50,59 @@ class PatternCardSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: const [
-            SkeletonBox(width: 96, height: 96, borderRadius: 16),
-            SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SkeletonBox(width: double.infinity, height: 18),
-                  SizedBox(height: 8),
-                  SkeletonBox(width: 120, height: 14),
-                  SizedBox(height: 12),
-                  SkeletonBox(width: 80, height: 32, borderRadius: 999),
-                ],
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final half = constraints.maxWidth / 2;
+          return SizedBox(
+            height: half,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: half,
+                      height: half,
+                      child: const ColoredBox(color: AppColors.background),
+                    ),
+                    SizedBox(
+                      width: half,
+                      height: half,
+                      child: const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SkeletonBox(width: 140, height: 16, borderRadius: 6),
+                            SizedBox(height: 8),
+                            SkeletonBox(width: 100, height: 12, borderRadius: 6),
+                            SizedBox(height: 10),
+                            SkeletonBox(width: 48, height: 20, borderRadius: 999),
+                            Spacer(),
+                            Row(
+                              children: [
+                                Expanded(child: SkeletonBox(width: 80, height: 36, borderRadius: 999)),
+                                SizedBox(width: 8),
+                                Expanded(child: SkeletonBox(width: 80, height: 36, borderRadius: 999)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

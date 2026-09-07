@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
-import '../../shared/widgets/filter_pill.dart';
 import '../../shared/widgets/home_empty_state.dart';
 import '../../shared/widgets/pattern_card_widget.dart';
 import '../../shared/widgets/skeleton_loader.dart';
@@ -49,46 +48,57 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       onRefresh: () async => ref.invalidate(patternsProvider(query)),
       color: AppColors.accent,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 2, 16, 120),
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (var i = 0; i < constants.rankPeriods.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 8),
-                  FilterPill(
-                    label: constants.rankPeriods[i].label,
-                    selected: period == constants.rankPeriods[i].value,
-                    showCheckmark: period == constants.rankPeriods[i].value,
-                    onTap: () => setState(() => period = constants.rankPeriods[i].value),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          DropdownMenu<String>(
-            initialSelection: category ?? 'all',
-            width: MediaQuery.sizeOf(context).width - 32,
-            textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.foreground),
-            inputDecorationTheme: const InputDecorationTheme(
-              filled: true,
-              fillColor: AppColors.background,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.all(Radius.circular(16)),
-                borderSide: BorderSide(color: AppColors.border),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.all(Radius.circular(16)),
-                borderSide: BorderSide(color: AppColors.border),
-              ),
-            ),
-            dropdownMenuEntries: [
-              const DropdownMenuEntry(value: 'all', label: 'All categories'),
-              for (final c in constants.categories) DropdownMenuEntry(value: c.slug, label: c.name),
+          _CategoryDropdown(
+            value: category ?? 'all',
+            entries: [
+              (value: 'all', label: 'All categories'),
+              for (final c in constants.categories) (value: c.slug, label: c.name),
             ],
-            onSelected: (value) => setState(() => category = value == 'all' ? null : value),
+            onChanged: (value) => setState(() => category = value == 'all' ? null : value),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<String>(
+              segments: [
+                for (final p in constants.rankPeriods)
+                  ButtonSegment<String>(
+                    value: p.value,
+                    label: Text(
+                      p.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+              ],
+              selected: {period},
+              onSelectionChanged: (selected) {
+                if (selected.isEmpty) return;
+                setState(() => period = selected.first);
+              },
+              showSelectedIcon: false,
+              style: ButtonStyle(
+                backgroundColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) return AppColors.primary;
+                  return AppColors.card;
+                }),
+                foregroundColor: const WidgetStatePropertyAll(AppColors.foreground),
+                side: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return const BorderSide(color: AppColors.primaryStrong);
+                  }
+                  return const BorderSide(color: AppColors.border);
+                }),
+                visualDensity: VisualDensity.compact,
+                padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 8, vertical: 10)),
+                shape: WidgetStatePropertyAll(
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 16),
           patternsAsync.when(
@@ -143,6 +153,108 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CategoryDropdown extends StatelessWidget {
+  const _CategoryDropdown({
+    required this.value,
+    required this.entries,
+    required this.onChanged,
+  });
+
+  final String value;
+  final List<({String value, String label})> entries;
+  final ValueChanged<String> onChanged;
+
+  String get _label =>
+      entries.where((e) => e.value == value).map((e) => e.label).firstOrNull ?? 'All categories';
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      style: MenuStyle(
+        backgroundColor: const WidgetStatePropertyAll(AppColors.card),
+        elevation: const WidgetStatePropertyAll(8),
+        shadowColor: WidgetStatePropertyAll(AppColors.accent.withValues(alpha: 0.18)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: AppColors.border),
+          ),
+        ),
+        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
+      ),
+      builder: (context, controller, child) {
+        return Material(
+          color: AppColors.card,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: AppColors.border),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () {
+              if (controller.isOpen) {
+                controller.close();
+              } else {
+                controller.open();
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.foreground,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    controller.isOpen ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                    size: 22,
+                    color: AppColors.muted,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+      menuChildren: [
+        for (final entry in entries)
+          MenuItemButton(
+            onPressed: () => onChanged(entry.value),
+            style: ButtonStyle(
+              backgroundColor: WidgetStatePropertyAll(
+                entry.value == value ? AppColors.primary.withValues(alpha: 0.55) : Colors.transparent,
+              ),
+              padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 14, vertical: 10)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    entry.label,
+                    style: TextStyle(
+                      fontWeight: entry.value == value ? FontWeight.w700 : FontWeight.w500,
+                      color: AppColors.foreground,
+                    ),
+                  ),
+                ),
+                if (entry.value == value)
+                  const Icon(Icons.check, size: 18, color: AppColors.foreground),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

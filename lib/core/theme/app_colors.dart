@@ -5,9 +5,11 @@ class AppColors {
   static const foreground = Color(0xFF1A1A1A);
   static const card = Color(0xFFFFFFFF);
   static const border = Color(0xFFEAE4EF);
+  /// Lavender fill only — never use as text/icon/outline on white surfaces.
   static const primary = Color(0xFFF0D7FF);
   static const primaryStrong = Color(0xFFE8C4FF);
   static const primaryForeground = Color(0xFF3D2F4A);
+  /// Dark purple for interactive accents on light backgrounds.
   static const accent = Color(0xFF3D2F4A);
   static const accentForeground = Color(0xFFFFFFFF);
   static const destructive = Color(0xFFB85C4A);

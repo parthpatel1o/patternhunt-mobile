@@ -12,6 +12,7 @@ import '../../features/mine/edit_pattern_screen.dart';
 import '../../features/mine/mine_screen.dart';
 import '../../features/pattern/pattern_detail_screen.dart';
 import '../../features/profile/creator_screen.dart';
+import '../../features/profile/profile_screen.dart';
 import '../../features/saved/board_detail_screen.dart';
 import '../../features/saved/saved_screen.dart';
 import '../../features/search/search_screen.dart';
@@ -59,7 +60,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/reset-password';
       }
       if (session == null &&
-          (['/submit', '/saved', '/profile', '/mine'].contains(state.matchedLocation) ||
+          (['/submit', '/saved', '/mine'].contains(state.matchedLocation) ||
               state.matchedLocation.startsWith('/mine/'))) {
         return '/login';
       }
@@ -79,15 +80,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
           GoRoute(path: '/saved', builder: (context, state) => const SavedScreen()),
+          GoRoute(path: '/mine', builder: (context, state) => const MineScreen()),
           GoRoute(path: '/submit', builder: (context, state) => const SubmitScreen()),
-          GoRoute(path: '/profile', builder: (context, state) => const SettingsScreen()),
-          GoRoute(path: '/settings', redirect: (context, _) => '/profile'),
+          GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
+          GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
           GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
           GoRoute(path: '/reset-password', builder: (context, state) => const ResetPasswordScreen()),
         ],
       ),
       GoRoute(path: '/search', builder: (context, state) => const SearchScreen()),
-      GoRoute(path: '/mine', builder: (context, state) => const MineScreen()),
       GoRoute(
         path: '/mine/:id/edit',
         builder: (context, state) => EditPatternScreen(patternId: state.pathParameters['id']!),

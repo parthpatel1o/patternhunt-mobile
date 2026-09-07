@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../core/providers/providers.dart';
+import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 
 class MineScreen extends ConsumerWidget {
@@ -11,101 +12,130 @@ class MineScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final patternsAsync = ref.watch(myPatternsProvider);
+    final isDesigner = ref.watch(profileProvider).valueOrNull?.isPatternDesigner ?? false;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('My patterns')),
-      body: patternsAsync.when(
-        loading: () => ListView(
-          padding: const EdgeInsets.all(16),
-          children: const [PatternCardSkeleton(), SizedBox(height: 12), PatternCardSkeleton()],
-        ),
-        error: (e, _) => Center(child: Text('$e')),
-        data: (patterns) {
-          if (patterns.isEmpty) {
-            return const Center(child: Text('You have not submitted any patterns yet.'));
-          }
-          return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(myPatternsProvider),
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: patterns.length,
-              itemBuilder: (context, index) {
-                final pattern = patterns[index];
-                return Dismissible(
-                  key: ValueKey(pattern.id),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 20),
-                    color: Colors.orange.shade100,
-                    child: const Icon(Icons.archive_outlined),
-                  ),
-                  confirmDismiss: (_) async {
-                    try {
-                      await ref.read(apiClientProvider).patch('/me/patterns/${pattern.id}/archive', {'archived': true});
-                      ref.invalidate(myPatternsProvider);
-                      return true;
-                    } on ApiException catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-                      }
-                      return false;
-                    }
-                  },
-                  child: Card(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: ListTile(
-                      title: Text(pattern.title),
-                      subtitle: Text(pattern.isArchived ? 'Archived' : '${pattern.voteCount} votes'),
-                      trailing: PopupMenuButton<String>(
-                        onSelected: (value) async {
-                          final api = ref.read(apiClientProvider);
-                          try {
-                            if (value == 'edit') {
-                              if (context.mounted) context.push('/mine/${pattern.id}/edit');
-                              return;
-                            }
-                            if (value == 'archive') {
-                              await api.patch('/me/patterns/${pattern.id}/archive', {'archived': !pattern.isArchived});
-                            } else if (value == 'delete') {
-                              final confirmed = await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  title: const Text('Delete pattern?'),
-                                  content: const Text('This cannot be undone.'),
-                                  actions: [
-                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                                    FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
-                                  ],
-                                ),
-                              );
-                              if (confirmed == true) await api.delete('/me/patterns/${pattern.id}');
-                            }
-                            ref.invalidate(myPatternsProvider);
-                          } on ApiException catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-                            }
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                          PopupMenuItem(
-                            value: 'archive',
-                            child: Text(pattern.isArchived ? 'Unarchive' : 'Archive'),
-                          ),
-                          const PopupMenuItem(value: 'delete', child: Text('Delete')),
-                        ],
-                      ),
-                      onTap: () => context.push('/pattern/${pattern.id}'),
+    return patternsAsync.when(
+      loading: () => ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        children: const [
+          PatternCardSkeleton(),
+          SizedBox(height: 12),
+          PatternCardSkeleton(),
+        ],
+      ),
+      error: (e, _) => Center(child: Text('$e')),
+      data: (patterns) {
+        return RefreshIndicator(
+          onRefresh: () async => ref.invalidate(myPatternsProvider),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'My Patterns',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                     ),
                   ),
-                );
-              },
-            ),
-          );
-        },
-      ),
+                  if (isDesigner)
+                    FilledButton.tonalIcon(
+                      onPressed: () => context.go('/submit'),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Submit'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (patterns.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 48),
+                  child: Center(
+                    child: Text(
+                      isDesigner
+                          ? 'You have not submitted any patterns yet.'
+                          : 'Register as a designer in Profile to submit patterns.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+                    ),
+                  ),
+                )
+              else
+                for (final pattern in patterns)
+                  Dismissible(
+                    key: ValueKey(pattern.id),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      color: Colors.orange.shade100,
+                      child: const Icon(Icons.archive_outlined),
+                    ),
+                    confirmDismiss: (_) async {
+                      try {
+                        await ref.read(apiClientProvider).patch('/me/patterns/${pattern.id}/archive', {'archived': true});
+                        ref.invalidate(myPatternsProvider);
+                        return true;
+                      } on ApiException catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+                        }
+                        return false;
+                      }
+                    },
+                    child: Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ListTile(
+                        title: Text(pattern.title),
+                        subtitle: Text(pattern.isArchived ? 'Archived' : '${pattern.voteCount} votes'),
+                        trailing: PopupMenuButton<String>(
+                          onSelected: (value) async {
+                            final api = ref.read(apiClientProvider);
+                            try {
+                              if (value == 'edit') {
+                                if (context.mounted) context.push('/mine/${pattern.id}/edit');
+                                return;
+                              }
+                              if (value == 'archive') {
+                                await api.patch('/me/patterns/${pattern.id}/archive', {'archived': !pattern.isArchived});
+                              } else if (value == 'delete') {
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('Delete pattern?'),
+                                    content: const Text('This cannot be undone.'),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                      FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+                                    ],
+                                  ),
+                                );
+                                if (confirmed == true) await api.delete('/me/patterns/${pattern.id}');
+                              }
+                              ref.invalidate(myPatternsProvider);
+                            } on ApiException catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+                              }
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                            PopupMenuItem(
+                              value: 'archive',
+                              child: Text(pattern.isArchived ? 'Unarchive' : 'Archive'),
+                            ),
+                            const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                          ],
+                        ),
+                        onTap: () => context.push('/pattern/${pattern.id}'),
+                      ),
+                    ),
+                  ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
