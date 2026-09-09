@@ -27,7 +27,7 @@ class SavedScreen extends ConsumerWidget {
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -142,8 +142,18 @@ class SavedScreen extends ConsumerWidget {
                       controller: controller,
                       autofocus: true,
                       maxLength: 40,
+                      style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.foreground,
+                          ),
                       decoration: InputDecoration(
                         hintText: 'Folder name',
+                        hintStyle: const TextStyle(
+                          color: AppColors.muted,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 15,
+                        ),
                         counterText: '',
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 10),

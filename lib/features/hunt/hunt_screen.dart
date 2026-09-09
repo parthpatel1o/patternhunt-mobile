@@ -20,6 +20,7 @@ import '../../shared/widgets/arrow_big_up_icon.dart';
 import '../../shared/widgets/in_app_webview.dart';
 import '../../shared/widgets/save_board_sheet.dart';
 import 'hunt_demo_pattern.dart';
+import 'hunt_show_filter.dart';
 import 'hunt_storage.dart';
 
 enum _HuntPhase { boot, setup, hunting, end }
@@ -37,6 +38,8 @@ const int _kFlyMs = 280;
 const int _kFlyUpMs = 360;
 const int _kSnapMs = 220;
 const int _kUpvotePopMs = 1400;
+/// After slide-up upvote feedback, auto-advance to the next card.
+const int _kUpvoteAdvanceMs = 1000;
 
 class HuntScreen extends ConsumerStatefulWidget {
   const HuntScreen({super.key});
@@ -53,6 +56,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
   String _category = 'all';
   String _order = 'random';
   String _period = 'all';
+  String _show = kDefaultHuntShowFilter;
   String _seed = '';
   List<PatternCard> _patterns = const [];
   int _pageOffset = 0;
@@ -70,7 +74,12 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
   String? _setupCategory;
   String? _setupOrder;
   String? _setupPeriod;
+  String? _setupShow;
   _HuntPhase? _phaseBeforeSetup;
+
+  /// Underlay side under the front card — web `underlaySide`: prev vs next.
+  /// Default / idle is next (`false`).
+  bool _peekPrevious = false;
 
   @override
   void initState() {
@@ -83,11 +92,13 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     final results = await Future.wait<Object?>([
       _storage.readTutorialSeen(),
       _storage.readHuntRun(),
+      _storage.readShow(),
     ]);
     if (!mounted) return;
 
     _tutorialSeen = results[0]! as bool;
     final run = results[1] as HuntRun?;
+    final storedShow = results[2]! as String;
     final profileCategory = ref
         .read(profileProvider)
         .valueOrNull
@@ -97,6 +108,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
       _category = run.category;
       _order = run.order;
       _period = run.period;
+      _show = run.show;
       _seed = run.seed;
       final pageSize = constants.huntPageSize;
       final offset = (run.index ~/ pageSize) * pageSize;
@@ -108,6 +120,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     _category = profileCategory ?? constants.defaultHuntCategory;
     _order = constants.defaultHuntOrder;
     _period = 'all';
+    _show = storedShow;
     await _startHunt();
   }
 
@@ -117,6 +130,8 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
       if (_order == 'random') 'seed': _seed,
       if (_category != 'all') 'category': _category,
       'period': _period,
+      // Match web: omit when `all`; API ignores for logged-out users.
+      if (_show != 'all') 'show': _show,
       'offset': offset,
       'limit': AppConstants.instance.huntPageSize,
     };
@@ -207,6 +222,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
       category: _category,
       order: _order,
       period: _period,
+      show: _show,
     );
     if (!mounted) return;
     await _loadPage(offset: 0, targetAbsoluteIndex: 0);
@@ -219,6 +235,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
         order: _order,
         category: _category,
         period: _period,
+        show: _show,
         index: _pageOffset + _index,
       ),
     );
@@ -228,13 +245,17 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     if (_loading || _patterns.isEmpty) return;
     final next = _index + delta;
     if (next >= 0 && next < _patterns.length) {
-      setState(() => _index = next);
+      setState(() {
+        _index = next;
+        _peekPrevious = false;
+      });
       await _persistRun();
       return;
     }
 
     if (delta > 0 && _hasMore) {
       final offset = _nextOffset ?? (_pageOffset + _patterns.length);
+      setState(() => _peekPrevious = false);
       await _loadPage(offset: offset, targetAbsoluteIndex: offset);
       return;
     }
@@ -243,12 +264,45 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
         0,
         _pageOffset,
       );
+      setState(() => _peekPrevious = false);
       await _loadPage(offset: offset, targetAbsoluteIndex: _pageOffset - 1);
       return;
     }
     if (delta > 0) {
-      setState(() => _phase = _HuntPhase.end);
+      setState(() {
+        _phase = _HuntPhase.end;
+        _peekPrevious = false;
+      });
     }
+  }
+
+  /// Match web: `dx >= 0` → previous underlay, else next; idle (`0`) defaults next.
+  void _onFrontDragX(double dragX) {
+    final wantPrev = dragX > 0;
+    if (wantPrev != _peekPrevious) {
+      setState(() => _peekPrevious = wantPrev);
+    }
+  }
+
+  /// Lock underlay for a committed fly-off before the exit animation.
+  void _onFrontPeekSide({required bool toNext}) {
+    final wantPrev = !toNext;
+    if (wantPrev != _peekPrevious) {
+      setState(() => _peekPrevious = wantPrev);
+    }
+  }
+
+  /// Keep `_patterns` in sync with vote UI so remounting a card (swipe back)
+  /// still shows the upvoted state — same idea as web `updateCurrentVote`.
+  void _updateCurrentVote(String patternId, bool voted, int voteCount) {
+    final i = _patterns.indexWhere((p) => p.id == patternId);
+    if (i < 0) return;
+    final current = _patterns[i];
+    if (current.voted == voted && current.voteCount == voteCount) return;
+    setState(() {
+      _patterns = List<PatternCard>.of(_patterns);
+      _patterns[i] = current.copyWith(voted: voted, voteCount: voteCount);
+    });
   }
 
   void _showFilters() {
@@ -257,6 +311,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
       _setupCategory = _category;
       _setupOrder = _order;
       _setupPeriod = _period;
+      _setupShow = _show;
       _phase = _HuntPhase.setup;
     });
   }
@@ -267,10 +322,12 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
         _category = _setupCategory!;
         _order = _setupOrder!;
         _period = _setupPeriod!;
+        _show = _setupShow ?? kDefaultHuntShowFilter;
       }
       _setupCategory = null;
       _setupOrder = null;
       _setupPeriod = null;
+      _setupShow = null;
       _phase = _phaseBeforeSetup ?? _HuntPhase.hunting;
       _phaseBeforeSetup = null;
     });
@@ -280,6 +337,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     _setupCategory = null;
     _setupOrder = null;
     _setupPeriod = null;
+    _setupShow = null;
     _phaseBeforeSetup = null;
     await _storage.clearHuntRun();
     if (!mounted) return;
@@ -463,8 +521,14 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     await _storage.writePeriod(value);
   }
 
+  Future<void> _setShow(String value) async {
+    setState(() => _show = value);
+    await _storage.writeShow(value);
+  }
+
   Widget _buildSetup() {
     final constants = AppConstants.instance;
+    final session = ref.watch(sessionProvider);
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
@@ -527,6 +591,15 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
                     ),
                 ],
               ),
+              if (session != null) ...[
+                const SizedBox(height: 14),
+                _ShowFilterGroup(
+                  show: _show,
+                  onToggle: (flag) => unawaited(
+                    _setShow(toggleHuntShowFilter(_show, flag)),
+                  ),
+                ),
+              ],
               const SizedBox(height: 14),
               _FilterGroup(
                 label: 'Order',
@@ -606,22 +679,30 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
 
   Widget _buildHunting() {
     // First visit: practice on the demo card before the real deck (web parity).
+    // Coach sheet is a Stack sibling of the card (like web HuntGestureTutorial),
+    // so idle swipe/slide transforms move only the card — not the sheet.
     if (!_tutorialSeen) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-        child: _HuntPatternCard(
-          key: ValueKey(_demoPattern.id),
-          pattern: _demoPattern,
-          period: _period,
-          tutorialMode: true,
-          tutorialStep: _tutorialStep,
-          onPreviousPattern: () {},
-          onNextPattern: () {},
-          onGesture: _onTutorialGesture,
-          tutorial: _TutorialCoach(
-            step: _tutorialStep,
-            onSkip: _finishTutorial,
-          ),
+        child: Stack(
+          fit: StackFit.expand,
+          clipBehavior: Clip.none,
+          children: [
+            _HuntPatternCard(
+              key: ValueKey(_demoPattern.id),
+              pattern: _demoPattern,
+              period: _period,
+              tutorialMode: true,
+              tutorialStep: _tutorialStep,
+              onPreviousPattern: () {},
+              onNextPattern: () {},
+              onGesture: _onTutorialGesture,
+            ),
+            _TutorialCoach(
+              step: _tutorialStep,
+              onSkip: _finishTutorial,
+            ),
+          ],
         ),
       );
     }
@@ -644,14 +725,65 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     }
 
     final pattern = _patterns[_index];
+    // Keep both peeks mounted when available so images stay warm; toggle
+    // visibility instead of swapping a single card mid-swipe (web parity).
+    final PatternCard? prevPattern =
+        _index > 0 ? _patterns[_index - 1] : null;
+    final PatternCard? nextPattern =
+        _index + 1 < _patterns.length ? _patterns[_index + 1] : null;
+    final showPrev = _peekPrevious;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-      child: _HuntPatternCard(
-        key: ValueKey(pattern.id),
-        pattern: pattern,
-        period: _period,
-        onPreviousPattern: () => _movePattern(-1),
-        onNextPattern: () => _movePattern(1),
+      child: Stack(
+        fit: StackFit.expand,
+        clipBehavior: Clip.none,
+        children: [
+          if (nextPattern != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: showPrev ? 0 : 1,
+                  child: _HuntPatternCard(
+                    key: ValueKey('peek-next-${nextPattern.id}'),
+                    pattern: nextPattern,
+                    period: _period,
+                    interactive: false,
+                    onPreviousPattern: () {},
+                    onNextPattern: () {},
+                  ),
+                ),
+              ),
+            ),
+          if (prevPattern != null)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: showPrev ? 1 : 0,
+                  child: _HuntPatternCard(
+                    key: ValueKey('peek-prev-${prevPattern.id}'),
+                    pattern: prevPattern,
+                    period: _period,
+                    interactive: false,
+                    onPreviousPattern: () {},
+                    onNextPattern: () {},
+                  ),
+                ),
+              ),
+            ),
+          Positioned.fill(
+            child: _HuntPatternCard(
+              key: ValueKey(pattern.id),
+              pattern: pattern,
+              period: _period,
+              onPreviousPattern: () => _movePattern(-1),
+              onNextPattern: () => _movePattern(1),
+              onDragX: _onFrontDragX,
+              onPeekSide: _onFrontPeekSide,
+              onVoteChange: _updateCurrentVote,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -717,6 +849,110 @@ class _FilterGroup extends StatelessWidget {
   }
 }
 
+class _ShowFilterGroup extends StatelessWidget {
+  const _ShowFilterGroup({
+    required this.show,
+    required this.onToggle,
+  });
+
+  final String show;
+  final ValueChanged<String> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'SHOW',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 11,
+            letterSpacing: 0.6,
+            color: AppColors.muted,
+          ),
+        ),
+        const SizedBox(height: 8),
+        for (var i = 0; i < kHuntShowChecks.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          _ShowCheckRow(
+            label: kHuntShowChecks[i].label,
+            checked: kHuntShowChecks[i].value == 'voted'
+                ? huntShowHasVoted(show)
+                : huntShowHasSaved(show),
+            onTap: () => onToggle(kHuntShowChecks[i].value),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ShowCheckRow extends StatelessWidget {
+  const _ShowCheckRow({
+    required this.label,
+    required this.checked,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool checked;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.background,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 22,
+                height: 22,
+                child: Checkbox(
+                  value: checked,
+                  onChanged: (_) => onTap(),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                  side: const BorderSide(color: AppColors.border, width: 1.5),
+                  activeColor: AppColors.accent,
+                  checkColor: AppColors.accentForeground,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.foreground,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+typedef _HuntVoteChange = void Function(
+  String patternId,
+  bool voted,
+  int voteCount,
+);
+
 class _HuntPatternCard extends ConsumerStatefulWidget {
   const _HuntPatternCard({
     super.key,
@@ -725,9 +961,12 @@ class _HuntPatternCard extends ConsumerStatefulWidget {
     required this.onPreviousPattern,
     required this.onNextPattern,
     this.onGesture,
-    this.tutorial,
+    this.onDragX,
+    this.onPeekSide,
+    this.onVoteChange,
     this.tutorialMode = false,
     this.tutorialStep = 0,
+    this.interactive = true,
   });
 
   final PatternCard pattern;
@@ -735,9 +974,16 @@ class _HuntPatternCard extends ConsumerStatefulWidget {
   final VoidCallback onPreviousPattern;
   final VoidCallback onNextPattern;
   final ValueChanged<_HuntGesture>? onGesture;
-  final Widget? tutorial;
+  /// Reports horizontal drag X so the parent can pick prev/next underlay from sign.
+  final ValueChanged<double>? onDragX;
+  /// Locks underlay side on committed fly-off (`toNext` → next, else previous).
+  final void Function({required bool toNext})? onPeekSide;
+  /// Notifies parent so `_patterns` stays current across card remounts.
+  final _HuntVoteChange? onVoteChange;
   final bool tutorialMode;
   final int tutorialStep;
+  /// When false, renders a static peek card (no gestures / actions).
+  final bool interactive;
 
   @override
   ConsumerState<_HuntPatternCard> createState() => _HuntPatternCardState();
@@ -802,7 +1048,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       vsync: this,
       duration: const Duration(milliseconds: 2200),
     );
-    // Matches web `hunt-tut-card-swipe`: 0 → -28px → +28px → 0.
+    // Matches web `hunt-tut-card-swipe`: 0 → -28px/−3.5° → +28px/+3.5° → 0.
     _swipeHintX = TweenSequence<double>([
       TweenSequenceItem(
         tween: Tween<double>(begin: 0, end: -28)
@@ -932,24 +1178,34 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     }
     final oldVoted = _voted;
     final oldCount = _voteCount;
+    final onVoteChange = widget.onVoteChange;
+    final patternId = widget.pattern.id;
     setState(() {
       _voting = true;
       _voted = !_voted;
       _voteCount = (_voteCount + (_voted ? 1 : -1)).clamp(0, 1 << 30);
     });
-    _showUpvotePop();
+    onVoteChange?.call(patternId, _voted, _voteCount);
+    // Burst / “Upvoted” only when adding a vote — never on un-vote.
+    if (_voted) {
+      _showUpvotePop();
+    }
     try {
       final response = await ref
           .read(apiClientProvider)
           .post(
-            '/patterns/${widget.pattern.id}/vote',
+            '/patterns/$patternId/vote',
             query: widget.period == 'all' ? null : {'period': widget.period},
           );
-      if (!mounted) return;
-      setState(() {
-        _voted = response['voted'] as bool? ?? _voted;
-        _voteCount = (response['voteCount'] as num?)?.toInt() ?? _voteCount;
-      });
+      final voted = response['voted'] as bool? ?? _voted;
+      final voteCount = (response['voteCount'] as num?)?.toInt() ?? _voteCount;
+      if (mounted) {
+        setState(() {
+          _voted = voted;
+          _voteCount = voteCount;
+        });
+      }
+      onVoteChange?.call(patternId, voted, voteCount);
       ref.invalidate(patternsProvider);
     } on ApiException catch (error) {
       if (mounted) {
@@ -959,6 +1215,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         });
         _showError(error.message);
       }
+      onVoteChange?.call(patternId, oldVoted, oldCount);
     } finally {
       if (mounted) setState(() => _voting = false);
     }
@@ -990,24 +1247,33 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     if (_voting) return;
     final oldVoted = _voted;
     final oldCount = _voteCount;
+    final onVoteChange = widget.onVoteChange;
+    final patternId = widget.pattern.id;
+    final period = widget.period;
     setState(() {
       _voting = true;
       _voted = true;
       _voteCount = (_voteCount + 1).clamp(0, 1 << 30);
     });
+    // Write into parent `_patterns` before auto-advance so swipe-back is correct.
+    onVoteChange?.call(patternId, _voted, _voteCount);
     _showUpvotePop();
     try {
       final response = await ref
           .read(apiClientProvider)
           .post(
-            '/patterns/${widget.pattern.id}/vote',
-            query: widget.period == 'all' ? null : {'period': widget.period},
+            '/patterns/$patternId/vote',
+            query: period == 'all' ? null : {'period': period},
           );
-      if (!mounted) return;
-      setState(() {
-        _voted = response['voted'] as bool? ?? _voted;
-        _voteCount = (response['voteCount'] as num?)?.toInt() ?? _voteCount;
-      });
+      final voted = response['voted'] as bool? ?? true;
+      final voteCount = (response['voteCount'] as num?)?.toInt() ?? _voteCount;
+      if (mounted) {
+        setState(() {
+          _voted = voted;
+          _voteCount = voteCount;
+        });
+      }
+      onVoteChange?.call(patternId, voted, voteCount);
       ref.invalidate(patternsProvider);
     } on ApiException catch (error) {
       if (mounted) {
@@ -1017,6 +1283,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         });
         _showError(error.message);
       }
+      onVoteChange?.call(patternId, oldVoted, oldCount);
     } finally {
       if (mounted) setState(() => _voting = false);
     }
@@ -1104,6 +1371,10 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     });
   }
 
+  void _emitDragX() {
+    widget.onDragX?.call(_dragX);
+  }
+
   Future<void> _flyOff({required bool toNext}) async {
     if (_exiting) return;
     _exiting = true;
@@ -1112,6 +1383,8 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       _stopSwipeHint();
     }
     widget.onGesture?.call(_HuntGesture.swipe);
+    // Lock underlay to the destination before the exit animation (web parity).
+    widget.onPeekSide?.call(toNext: toNext);
     final width = MediaQuery.sizeOf(context).width;
     final targetX = toNext ? -width * 1.2 : width * 1.2;
     setState(() {
@@ -1119,6 +1392,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       _dragY = _dragY * 0.35;
       _upvoteDragProgress = 0;
     });
+    _emitDragX();
     await Future<void>.delayed(const Duration(milliseconds: _kFlyMs));
     if (!mounted) return;
 
@@ -1128,6 +1402,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         _dragY = 0;
         _exiting = false;
       });
+      _emitDragX();
       return;
     }
 
@@ -1153,6 +1428,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       _dragX = _dragX * 0.2;
       _dragY = -lift;
     });
+    _emitDragX();
     widget.onGesture?.call(_HuntGesture.slideUp);
     unawaited(_upvoteFromSlideUp());
     await Future<void>.delayed(const Duration(milliseconds: _kFlyUpMs - 30));
@@ -1163,9 +1439,29 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       _upvoteDragProgress = 0;
       _flyingUp = false;
     });
+    _emitDragX();
     await Future<void>.delayed(const Duration(milliseconds: _kSnapMs));
     if (!mounted) return;
+
+    // Tutorial: stay on demo card; do not advance into the real deck.
+    if (widget.tutorialMode) {
+      _exiting = false;
+      return;
+    }
+
+    // Logged-out slide-up redirects to profile — no auto-advance.
+    if (ref.read(sessionProvider) == null) {
+      _exiting = false;
+      return;
+    }
+
+    // Let upvote feedback (“Upvoted” / burst) read, then fly to next.
+    await Future<void>.delayed(
+      const Duration(milliseconds: _kUpvoteAdvanceMs),
+    );
+    if (!mounted) return;
     _exiting = false;
+    await _flyOff(toNext: true);
   }
 
   void _snapBack() {
@@ -1174,6 +1470,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       _dragY = 0;
       _upvoteDragProgress = 0;
     });
+    _emitDragX();
   }
 
   void _handlePhotoTap(bool right) {
@@ -1195,6 +1492,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       _dragY = 0;
       _upvoteDragProgress = 0;
     });
+    _emitDragX();
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
@@ -1231,6 +1529,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         _dragY = dy * 0.12;
         _upvoteDragProgress = 0;
       });
+      _emitDragX();
       return;
     }
 
@@ -1243,6 +1542,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         _upvoteDragProgress =
             (-y / _kUpvoteThresholdPx).clamp(0.0, 1.0);
       });
+      _emitDragX();
     }
   }
 
@@ -1369,7 +1669,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     final hasCta = !_isDemo && (download || pattern.patternUrl != null);
     // Match web HuntCard: rotate(deg) = x * 0.04
     final rotation = _dragX * 0.04 * (math.pi / 180);
-    final cardCoach = _buildCardCoach();
+    final cardCoach = widget.interactive ? _buildCardCoach() : null;
     final rank = _isDemo ? null : pattern.allTimeRank;
     final periodLabel = AppConstants.instance.rankPeriods
             .where((p) => p.value == widget.period)
@@ -1379,269 +1679,277 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     final rankColors = rank != null ? _rankBadgeColors(rank) : null;
     final (pillBg, pillFg) = _pricePillColors(rank);
 
-    final card = Stack(
-      fit: StackFit.expand,
-      clipBehavior: Clip.none,
-      children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onPanStart: _onPanStart,
-          onPanUpdate: _onPanUpdate,
-          onPanEnd: _onPanEnd,
-          onPanCancel: _onPanCancel,
-          child: Container(
-            clipBehavior:
-                (_showSwipeHint || _showSlideUpHint) ? Clip.none : Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: AppColors.border),
-              boxShadow: AppShadows.card,
-            ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (images.length > 1) ...[
-                          Row(
-                            children: [
-                              for (var index = 0;
-                                  index < images.length;
-                                  index++) ...[
-                                if (index > 0) const SizedBox(width: 6),
-                                Expanded(
-                                  child: AnimatedContainer(
-                                    duration:
-                                        const Duration(milliseconds: 180),
-                                    height: 6,
-                                    decoration: BoxDecoration(
-                                      color: index == _imageIndex
-                                          ? AppColors.accent
-                                          : AppColors.border,
-                                      borderRadius: BorderRadius.circular(99),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                        AspectRatio(
-                          aspectRatio: 1,
-                          child: _HuntGallery(
-                            images: images,
-                            imageIndex: _imageIndex,
-                            heartPop: _heartPop,
-                            upvoteDragProgress: _upvoteDragProgress,
-                            onTapSide: _handlePhotoTap,
-                            cardCoach: cardCoach,
+    final cardBody = Container(
+      clipBehavior:
+          (_showSwipeHint || _showSlideUpHint) ? Clip.none : Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.border),
+        boxShadow: AppShadows.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (images.length > 1) ...[
+                  Row(
+                    children: [
+                      for (var index = 0;
+                          index < images.length;
+                          index++) ...[
+                        if (index > 0) const SizedBox(width: 6),
+                        Expanded(
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: index == _imageIndex
+                                  ? AppColors.accent
+                                  : AppColors.border,
+                              borderRadius: BorderRadius.circular(99),
+                            ),
                           ),
                         ),
                       ],
-                    ),
+                    ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                    decoration: const BoxDecoration(
-                      border: Border(
-                        top: BorderSide(color: AppColors.border),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
-                          children: [
-                            if (_isDemo)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.background,
-                                  borderRadius: BorderRadius.circular(999),
-                                  border:
-                                      Border.all(color: AppColors.border),
-                                ),
-                                child: const Text(
-                                  'Demo',
-                                  style: TextStyle(
-                                    color: AppColors.muted,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                            if (rank != null && rankColors != null)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: rankColors.$1,
-                                  borderRadius: BorderRadius.circular(999),
-                                  border: rank > 3
-                                      ? Border.all(color: AppColors.border)
-                                      : null,
-                                ),
-                                child: Text(
-                                  '#$rank $periodLabel',
-                                  style: TextStyle(
-                                    color: rankColors.$2,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: pillBg,
-                                borderRadius: BorderRadius.circular(999),
-                                boxShadow: rank != null && rank <= 3
-                                    ? [
-                                        BoxShadow(
-                                          color: AppColors.accent
-                                              .withValues(alpha: 0.08),
-                                          blurRadius: 6,
-                                          offset: const Offset(0, 1),
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                              child: Text(
-                                pattern.isFree ? 'Free' : 'Paid',
-                                style: TextStyle(
-                                  color: pillFg,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ],
+                  const SizedBox(height: 12),
+                ],
+                AspectRatio(
+                  aspectRatio: 1,
+                  child: _HuntGallery(
+                    images: images,
+                    imageIndex: _imageIndex,
+                    heartPop: widget.interactive && _heartPop,
+                    upvoteDragProgress:
+                        widget.interactive ? _upvoteDragProgress : 0,
+                    onTapSide: widget.interactive
+                        ? _handlePhotoTap
+                        : (_) {},
+                    cardCoach: cardCoach,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+            decoration: const BoxDecoration(
+              border: Border(
+                top: BorderSide(color: AppColors.border),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    if (_isDemo)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          pattern.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.foreground,
-                            fontSize: 22,
-                            height: 1.15,
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: const Text(
+                          'Demo',
+                          style: TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    if (rank != null && rankColors != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: rankColors.$1,
+                          borderRadius: BorderRadius.circular(999),
+                          border: rank > 3
+                              ? Border.all(color: AppColors.border)
+                              : null,
+                        ),
+                        child: Text(
+                          '#$rank $periodLabel',
+                          style: TextStyle(
+                            color: rankColors.$2,
+                            fontSize: 13,
+                            height: 1.0,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        if (_isDemo)
-                          Text(
-                            pattern.designerName,
-                            style: const TextStyle(
-                              color: AppColors.foreground,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                            ),
-                          )
-                        else
-                          GestureDetector(
-                            onTap: () => context
-                                .push(creatorPath(pattern.designerName)),
-                            child: Text(
-                              pattern.designerName,
-                              style: const TextStyle(
-                                color: AppColors.foreground,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 15,
-                                decoration: TextDecoration.underline,
-                              ),
-                            ),
-                          ),
-                        const SizedBox(height: 14),
-                        if (_isDemo)
-                          const Text(
-                            'Try the gestures on this card — nothing is saved until you start hunting.',
-                            style: TextStyle(
-                              color: AppColors.muted,
-                              fontSize: 13,
-                              height: 1.35,
-                            ),
-                          )
-                        else
-                          Row(
-                            children: [
-                              _RoundActionButton(
-                                tooltip: _saved ? 'Saved' : 'Save',
-                                icon: _saved
-                                    ? Icons.bookmark_rounded
-                                    : Icons.bookmark_outline_rounded,
-                                onPressed: _saving ? null : _toggleSave,
-                                onLongPress:
-                                    _saving ? null : _openSaveSheet,
-                              ),
-                              const SizedBox(width: 8),
-                              _VoteButton(
-                                voted: _voted,
-                                voteCount: _voteCount,
-                                busy: _voting,
-                                onPressed: _toggleVote,
-                              ),
-                              if (hasCta) ...[
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: SizedBox(
-                                    height: 44,
-                                    child: FilledButton(
-                                      onPressed:
-                                          _ctaLoading ? null : _onCta,
-                                      style: FilledButton.styleFrom(
-                                        backgroundColor: AppColors.accent,
-                                        foregroundColor:
-                                            AppColors.accentForeground,
-                                        shape: const StadiumBorder(),
-                                      ),
-                                      child: Text(
-                                        _ctaLoading
-                                            ? 'Loading…'
-                                            : download
-                                                ? 'Download'
-                                                : 'View Pattern',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                      ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: pillBg,
+                        borderRadius: BorderRadius.circular(999),
+                        boxShadow: rank != null && rank <= 3
+                            ? [
+                                BoxShadow(
+                                  color: AppColors.accent
+                                      .withValues(alpha: 0.08),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 1),
                                 ),
-                              ],
-                            ],
-                          ),
-                      ],
+                              ]
+                            : null,
+                      ),
+                      child: Text(
+                        pattern.isFree ? 'Free' : 'Paid',
+                        style: TextStyle(
+                          color: pillFg,
+                          fontSize: 13,
+                          height: 1.0,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  pattern.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.foreground,
+                    fontSize: 22,
+                    height: 1.15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                if (_isDemo || !widget.interactive)
+                  Text(
+                    pattern.designerName,
+                    style: const TextStyle(
+                      color: AppColors.foreground,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  )
+                else
+                  GestureDetector(
+                    onTap: () =>
+                        context.push(creatorPath(pattern.designerName)),
+                    child: Text(
+                      pattern.designerName,
+                      style: const TextStyle(
+                        color: AppColors.foreground,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        decoration: TextDecoration.underline,
+                      ),
                     ),
                   ),
-                  const Spacer(),
-                ],
-              ),
+                const SizedBox(height: 14),
+                if (_isDemo)
+                  const Text(
+                    'Try the gestures on this card — nothing is saved until you start hunting.',
+                    style: TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 13,
+                      height: 1.35,
+                    ),
+                  )
+                else
+                  Row(
+                    children: [
+                      _RoundActionButton(
+                        tooltip: _saved ? 'Saved' : 'Save',
+                        icon: _saved
+                            ? Icons.bookmark_rounded
+                            : Icons.bookmark_outline_rounded,
+                        onPressed: (!widget.interactive || _saving)
+                            ? null
+                            : _toggleSave,
+                        onLongPress: (!widget.interactive || _saving)
+                            ? null
+                            : _openSaveSheet,
+                      ),
+                      const SizedBox(width: 8),
+                      _VoteButton(
+                        voted: _voted,
+                        voteCount: _voteCount,
+                        busy: !widget.interactive || _voting,
+                        onPressed: _toggleVote,
+                      ),
+                      if (hasCta) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SizedBox(
+                            height: 44,
+                            child: FilledButton(
+                              onPressed: (!widget.interactive ||
+                                      _ctaLoading)
+                                  ? null
+                                  : _onCta,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.accent,
+                                foregroundColor:
+                                    AppColors.accentForeground,
+                                shape: const StadiumBorder(),
+                              ),
+                              child: Text(
+                                _ctaLoading
+                                    ? 'Loading…'
+                                    : download
+                                        ? 'Download'
+                                        : 'View Pattern',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+              ],
             ),
           ),
-          // Bottom tutorial sheet stays visible during upvote feedback (web behavior).
-          if (widget.tutorial != null) widget.tutorial!,
+          const Spacer(),
         ],
+      ),
     );
+
+    final card = widget.interactive
+        ? GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onPanStart: _onPanStart,
+            onPanUpdate: _onPanUpdate,
+            onPanEnd: _onPanEnd,
+            onPanCancel: _onPanCancel,
+            child: cardBody,
+          )
+        : cardBody;
+
+    if (!widget.interactive) {
+      return card;
+    }
 
     if (_showSwipeHint) {
       return AnimatedBuilder(
@@ -2333,47 +2641,47 @@ class _TutorialCoach extends StatelessWidget {
     final isPracticeStep = step < 4;
 
     if (!isPracticeStep) {
-      return Positioned.fill(
-        child: Center(
+      return Positioned(
+        left: 12,
+        right: 12,
+        bottom: 12,
+        child: Material(
+          color: AppColors.accent,
+          borderRadius: BorderRadius.circular(22),
+          elevation: 12,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Material(
-              color: AppColors.accent,
-              borderRadius: BorderRadius.circular(22),
-              elevation: 12,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.favorite_rounded,
-                      size: 40,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      item.$1,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.favorite_rounded,
+                  size: 40,
+                  color: AppColors.primary,
                 ),
-              ),
+                const SizedBox(height: 16),
+                Text(
+                  item.$1,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
       );
     }
 
+    // Sibling of the card Stack in `_buildHunting` (web HuntGestureTutorial);
+    // not parented under card transforms, so idle swipe/slide won't move it.
     return Positioned(
       left: 12,
       right: 12,
-      bottom: 104,
+      bottom: 12,
       child: Material(
         color: AppColors.accent.withValues(alpha: 0.98),
         borderRadius: BorderRadius.circular(18),

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
+import '../../core/theme/app_colors.dart';
 
 Future<void> showSaveBoardSheet(BuildContext context, WidgetRef ref, String patternId) async {
   final session = ref.read(sessionProvider);
@@ -154,9 +155,19 @@ class _SaveBoardSheetBodyState extends ConsumerState<_SaveBoardSheetBody> {
                     child: TextField(
                       controller: _newFolderController,
                       enabled: !_busy,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.foreground,
+                      ),
                       decoration: const InputDecoration(
                         labelText: 'New folder',
                         hintText: 'Folder name',
+                        hintStyle: TextStyle(
+                          color: AppColors.muted,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 15,
+                        ),
                       ),
                       textInputAction: TextInputAction.done,
                       onSubmitted: (_) => _createFolder(),

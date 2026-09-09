@@ -49,6 +49,29 @@ class PatternCard {
       allTimeRank: json['allTimeRank'] as int?,
     );
   }
+
+  PatternCard copyWith({
+    int? voteCount,
+    bool? voted,
+    bool? saved,
+  }) {
+    return PatternCard(
+      id: id,
+      title: title,
+      slug: slug,
+      imageUrls: imageUrls,
+      designerName: designerName,
+      patternUrl: patternUrl,
+      isFree: isFree,
+      hasPdf: hasPdf,
+      voteCount: voteCount ?? this.voteCount,
+      voted: voted ?? this.voted,
+      createdAt: createdAt,
+      isArchived: isArchived,
+      saved: saved ?? this.saved,
+      allTimeRank: allTimeRank,
+    );
+  }
 }
 
 class PatternsPage {

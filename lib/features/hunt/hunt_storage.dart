@@ -2,12 +2,15 @@ import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'hunt_show_filter.dart';
+
 class HuntRun {
   const HuntRun({
     required this.seed,
     required this.order,
     required this.category,
     required this.period,
+    required this.show,
     required this.index,
   });
 
@@ -15,6 +18,7 @@ class HuntRun {
   final String order;
   final String category;
   final String period;
+  final String show;
   final int index;
 
   HuntRun copyWith({int? index}) {
@@ -23,6 +27,7 @@ class HuntRun {
       order: order,
       category: category,
       period: period,
+      show: show,
       index: index ?? this.index,
     );
   }
@@ -33,10 +38,12 @@ class HuntStorage {
   static const _categoryKey = 'hunt.category';
   static const _orderKey = 'hunt.order';
   static const _periodKey = 'hunt.period';
+  static const _showKey = 'hunt.show';
   static const _runSeedKey = 'hunt.run.seed';
   static const _runOrderKey = 'hunt.run.order';
   static const _runCategoryKey = 'hunt.run.category';
   static const _runPeriodKey = 'hunt.run.period';
+  static const _runShowKey = 'hunt.run.show';
   static const _runIndexKey = 'hunt.run.index';
 
   Future<SharedPreferences> get _preferences => SharedPreferences.getInstance();
@@ -73,16 +80,36 @@ class HuntStorage {
     await (await _preferences).setString(_periodKey, period);
   }
 
+  Future<String> readShow() async {
+    final prefs = await _preferences;
+    final raw = prefs.getString(_showKey);
+    final show = normalizeHuntShowFilter(raw);
+    // Persist migration so legacy values (`unvoted_saved`, old `saved`) don't stick.
+    if (raw != show) {
+      await prefs.setString(_showKey, show);
+    }
+    return show;
+  }
+
+  Future<void> writeShow(String show) async {
+    await (await _preferences).setString(
+      _showKey,
+      normalizeHuntShowFilter(show),
+    );
+  }
+
   Future<void> writePreferences({
     required String category,
     required String order,
     required String period,
+    required String show,
   }) async {
     final preferences = await _preferences;
     await Future.wait([
       preferences.setString(_categoryKey, category),
       preferences.setString(_orderKey, order),
       preferences.setString(_periodKey, period),
+      preferences.setString(_showKey, normalizeHuntShowFilter(show)),
     ]);
   }
 
@@ -92,6 +119,7 @@ class HuntStorage {
     final order = preferences.getString(_runOrderKey);
     final category = preferences.getString(_runCategoryKey);
     final period = preferences.getString(_runPeriodKey);
+    final showRaw = preferences.getString(_runShowKey);
     final index = preferences.getInt(_runIndexKey);
     if (seed == null ||
         order == null ||
@@ -100,11 +128,13 @@ class HuntStorage {
         index == null) {
       return null;
     }
+    final show = normalizeHuntShowFilter(showRaw);
     return HuntRun(
       seed: seed,
       order: order,
       category: category,
       period: period,
+      show: show,
       index: index,
     );
   }
@@ -116,6 +146,7 @@ class HuntStorage {
       preferences.setString(_runOrderKey, run.order),
       preferences.setString(_runCategoryKey, run.category),
       preferences.setString(_runPeriodKey, run.period),
+      preferences.setString(_runShowKey, normalizeHuntShowFilter(run.show)),
       preferences.setInt(_runIndexKey, run.index),
     ]);
   }
@@ -127,6 +158,7 @@ class HuntStorage {
       preferences.remove(_runOrderKey),
       preferences.remove(_runCategoryKey),
       preferences.remove(_runPeriodKey),
+      preferences.remove(_runShowKey),
       preferences.remove(_runIndexKey),
     ]);
   }

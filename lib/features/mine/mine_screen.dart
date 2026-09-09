@@ -36,7 +36,7 @@ class MineScreen extends ConsumerWidget {
             if (isDesigner) ref.invalidate(insightsProvider);
           },
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 88),
             children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,

@@ -185,8 +185,8 @@ class BoardDetailScreen extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete folder?'),
-        content: Text('Delete “$name”? Patterns stay saved in other folders.'),
+        title: const Text('Delete folder'),
+        content: Text('Are you sure you want to delete $name folder?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
