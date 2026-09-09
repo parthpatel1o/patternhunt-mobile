@@ -10,8 +10,15 @@ import '../../shared/widgets/google_logo.dart';
 
 enum _AuthMode { login, signup, forgot }
 
+/// Space below the status bar / screen top for all login ListViews.
+const double _loginTopInset = 28;
+
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.nextPath});
+
+  /// Fallback post-login path when the route has no `?next=` query param
+  /// (e.g. when embedded from Profile).
+  final String? nextPath;
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -104,12 +111,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           return;
         }
       }
-      if (mounted) context.go('/');
+      if (mounted) context.go(_resolveNextPath());
     } on AuthException catch (e) {
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Prefer `?next=` from the current route, then [LoginScreen.nextPath], else `/`.
+  String _resolveNextPath() {
+    String? fromQuery;
+    try {
+      fromQuery = GoRouterState.of(context).uri.queryParameters['next'];
+    } catch (_) {
+      fromQuery = null;
+    }
+    return _safeInternalPath(fromQuery) ??
+        _safeInternalPath(widget.nextPath) ??
+        '/';
   }
 
   Future<void> _googleSignIn() async {
@@ -141,64 +161,66 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       color: AppColors.foreground,
     );
 
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        const SizedBox(height: 16),
-        Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(16),
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(24, _loginTopInset, 24, 24),
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(Icons.mark_email_read_outlined, size: 32, color: AppColors.accent),
           ),
-          child: const Icon(Icons.mark_email_read_outlined, size: 32, color: AppColors.accent),
-        ),
-        const SizedBox(height: 24),
-        Text(title, style: titleStyle),
-        const SizedBox(height: 12),
-        Text(body, style: Theme.of(context).textTheme.bodyMedium),
-        const SizedBox(height: 8),
-        Text(
-          hint,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
-        ),
-        const SizedBox(height: 32),
-        FilledButton(onPressed: onBack, child: Text(buttonLabel)),
-      ],
+          const SizedBox(height: 24),
+          Text(title, style: titleStyle),
+          const SizedBox(height: 12),
+          Text(body, style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 8),
+          Text(
+            hint,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+          ),
+          const SizedBox(height: 32),
+          FilledButton(onPressed: onBack, child: Text(buttonLabel)),
+        ],
+      ),
     );
   }
 
   Widget _buildSignupSuccess() {
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        const SizedBox(height: 16),
-        Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(16),
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(24, _loginTopInset, 24, 24),
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(Icons.mark_email_read_outlined, size: 32, color: AppColors.accent),
           ),
-          child: const Icon(Icons.mark_email_read_outlined, size: 32, color: AppColors.accent),
-        ),
-        const SizedBox(height: 24),
-        Text(
-          'Check your email',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: AppColors.foreground,
+          const SizedBox(height: 24),
+          Text(
+            'Check your email',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: AppColors.foreground,
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'We sent a confirmation link to $_signupSuccessEmail. Tap it to confirm and log in.',
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-        const SizedBox(height: 32),
-        FilledButton(onPressed: _resetSignupSuccess, child: const Text('Got it')),
-      ],
+          const SizedBox(height: 12),
+          Text(
+            'We sent a confirmation link to $_signupSuccessEmail. Tap it to confirm and log in.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 32),
+          FilledButton(onPressed: _resetSignupSuccess, child: const Text('Got it')),
+        ],
+      ),
     );
   }
 
@@ -220,114 +242,212 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return _buildForgotSuccess();
     }
 
-    final titleStyle = Theme.of(context).textTheme.titleLarge?.copyWith(
-      fontWeight: FontWeight.w700,
-      color: AppColors.foreground,
-    );
-
     final title = switch (_mode) {
-      _AuthMode.login => 'Log in',
+      _AuthMode.login => 'Welcome back',
       _AuthMode.signup => 'Create account',
       _AuthMode.forgot => 'Reset password',
     };
 
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        Text(title, style: titleStyle),
-        const SizedBox(height: 24),
-        if (_mode != _AuthMode.forgot) ...[
-          OutlinedButton.icon(
-            onPressed: _loading ? null : _googleSignIn,
-            icon: const GoogleLogo(size: 20),
-            label: const Text('Continue with Google'),
-          ),
-          const SizedBox(height: 24),
-          const Divider(),
-          const SizedBox(height: 24),
-        ],
-        TextField(
-          controller: _email,
-          keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(labelText: 'Email'),
+    final subtitle = switch (_mode) {
+      _AuthMode.login => 'Log in to vote on patterns and save your favourites. Designers can submit patterns too.',
+      _AuthMode.signup => 'Join Pattern Hunt to vote, save favourites, and submit patterns.',
+      _AuthMode.forgot => 'Enter your email and we’ll send a reset link.',
+    };
+
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, _loginTopInset, 20, 40),
+        children: [
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
         ),
-        if (_mode != _AuthMode.forgot) ...[
-          const SizedBox(height: 12),
-          TextField(
-            controller: _password,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'Password'),
-          ),
-        ],
-        if (_mode == _AuthMode.signup) ...[
-          const SizedBox(height: 12),
-          SwitchListTile(
-            title: const Text('Register as a pattern designer'),
-            value: _designer,
-            onChanged: (v) => setState(() => _designer = v),
-          ),
-          if (_designer) ...[
-            const SizedBox(height: 8),
-            TextField(controller: _name, decoration: const InputDecoration(labelText: 'Designer name')),
-          ],
-        ],
-        if (_mode == _AuthMode.login) ...[
-          const SizedBox(height: 4),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: _loading
-                  ? null
-                  : () => setState(() {
-                      _mode = _AuthMode.forgot;
-                      _error = null;
-                    }),
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        const SizedBox(height: 8),
+        Text(
+          subtitle,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+        ),
+        const SizedBox(height: 20),
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.accent.withValues(alpha: 0.08),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
               ),
-              child: const Text('Forgot password?'),
-            ),
+            ],
           ),
-        ],
-        if (_error != null) ...[
-          const SizedBox(height: 12),
-          Text(_error!, style: const TextStyle(color: AppColors.destructive)),
-        ],
-        const SizedBox(height: 24),
-        FilledButton(
-          onPressed: _loading ? null : _submit,
-          child: Text(
-            _loading
-                ? 'Please wait…'
-                : switch (_mode) {
-                    _AuthMode.login => 'Log in',
-                    _AuthMode.signup => 'Sign up',
-                    _AuthMode.forgot => 'Send reset link',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_mode != _AuthMode.forgot) ...[
+                OutlinedButton(
+                  onPressed: _loading ? null : _googleSignIn,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.foreground,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: const StadiumBorder(),
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: GoogleLogo(size: 20),
+                      ),
+                      SizedBox(width: 12),
+                      Text('Continue with Google'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Expanded(child: Divider()),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text(
+                        'OR EMAIL',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: AppColors.muted,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
+                            ),
+                      ),
+                    ),
+                    const Expanded(child: Divider()),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
+              TextField(
+                controller: _email,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  labelText: 'Email',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+              ),
+              if (_mode != _AuthMode.forgot) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _password,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+                if (_mode == _AuthMode.login)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _loading
+                          ? null
+                          : () => setState(() {
+                                _mode = _AuthMode.forgot;
+                                _error = null;
+                              }),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        foregroundColor: AppColors.muted,
+                        textStyle: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      child: const Text('Forgot password?'),
+                    ),
+                  ),
+              ],
+              if (_mode == _AuthMode.signup) ...[
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Register as a pattern designer'),
+                  value: _designer,
+                  onChanged: (v) => setState(() => _designer = v),
+                ),
+                if (_designer) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _name,
+                    decoration: InputDecoration(
+                      labelText: 'Designer name',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                  ),
+                ],
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!, style: const TextStyle(color: AppColors.destructive)),
+              ],
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: _loading ? null : _submit,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: AppColors.foreground,
+                  shape: const StadiumBorder(),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: Text(
+                  _loading
+                      ? 'Please wait…'
+                      : switch (_mode) {
+                          _AuthMode.login => 'Log in',
+                          _AuthMode.signup => 'Sign up',
+                          _AuthMode.forgot => 'Send reset link',
+                        },
+                ),
+              ),
+              TextButton(
+                onPressed: _loading
+                    ? null
+                    : () => setState(() {
+                        if (_mode == _AuthMode.forgot) {
+                          _mode = _AuthMode.login;
+                        } else {
+                          _mode = _mode == _AuthMode.signup ? _AuthMode.login : _AuthMode.signup;
+                        }
+                        _error = null;
+                      }),
+                child: Text(
+                  switch (_mode) {
+                    _AuthMode.login => 'Need an account? Sign up',
+                    _AuthMode.signup => 'Already have an account? Log in',
+                    _AuthMode.forgot => 'Back to log in',
                   },
+                  style: TextStyle(color: AppColors.muted),
+                ),
+              ),
+            ],
           ),
         ),
-        TextButton(
-          onPressed: _loading
-              ? null
-              : () => setState(() {
-                  if (_mode == _AuthMode.forgot) {
-                    _mode = _AuthMode.login;
-                  } else {
-                    _mode = _mode == _AuthMode.signup ? _AuthMode.login : _AuthMode.signup;
-                  }
-                  _error = null;
-                }),
-          child: Text(
-            switch (_mode) {
-              _AuthMode.login => 'New here? Create an account',
-              _AuthMode.signup => 'Already have an account? Log in',
-              _AuthMode.forgot => 'Back to log in',
-            },
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
+}
+
+/// Only allow in-app relative paths for post-login redirects.
+String? _safeInternalPath(String? next) {
+  if (next == null || next.isEmpty) return null;
+  final decoded = Uri.decodeComponent(next);
+  if (!decoded.startsWith('/') || decoded.startsWith('//')) return null;
+  if (decoded.startsWith('/login')) return null;
+  return decoded;
 }

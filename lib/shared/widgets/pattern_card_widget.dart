@@ -1,14 +1,20 @@
+import 'dart:ui';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/analytics/analytics.dart';
 import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/slugify.dart';
+import 'arrow_big_up_icon.dart';
 import 'photo_viewer.dart';
 import 'save_board_sheet.dart';
 import 'in_app_webview.dart';
@@ -83,13 +89,15 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
   bool get _onPodium => widget.showRank && widget.rank <= 3;
 
   (Color bg, Color border, double borderWidth, List<BoxShadow> shadows) _rankStyle() {
+    // Matches web globals.css --shadow / --shadow-rank-* tokens.
     if (!widget.showRank) {
       return (
         AppColors.card,
         AppColors.border,
         1,
-        [
-          BoxShadow(color: AppColors.accent.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, 6)),
+        const [
+          BoxShadow(color: Color(0x383D2F4A), blurRadius: 20, spreadRadius: -6, offset: Offset(0, 6)),
+          BoxShadow(color: Color(0x143D2F4A), blurRadius: 6, spreadRadius: -2, offset: Offset(0, 2)),
         ],
       );
     }
@@ -98,35 +106,36 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
           AppColors.rank1Bg,
           AppColors.rank1Border,
           2,
-          [
-            BoxShadow(color: AppColors.accent.withValues(alpha: 0.4), blurRadius: 32, offset: const Offset(0, 12)),
-            BoxShadow(color: AppColors.accent.withValues(alpha: 0.18), blurRadius: 12, offset: const Offset(0, 4)),
+          const [
+            BoxShadow(color: Color(0x663D2F4A), blurRadius: 32, spreadRadius: -8, offset: Offset(0, 12)),
+            BoxShadow(color: Color(0x2E3D2F4A), blurRadius: 12, spreadRadius: -3, offset: Offset(0, 4)),
           ],
         ),
       2 => (
           AppColors.rank2Bg,
           AppColors.rank2Border,
           2,
-          [
-            BoxShadow(color: AppColors.accent.withValues(alpha: 0.34), blurRadius: 28, offset: const Offset(0, 10)),
-            BoxShadow(color: AppColors.accent.withValues(alpha: 0.14), blurRadius: 10, offset: const Offset(0, 3)),
+          const [
+            BoxShadow(color: Color(0x573D2F4A), blurRadius: 28, spreadRadius: -8, offset: Offset(0, 10)),
+            BoxShadow(color: Color(0x243D2F4A), blurRadius: 10, spreadRadius: -3, offset: Offset(0, 3)),
           ],
         ),
       3 => (
           AppColors.rank3Bg,
           AppColors.rank3Border,
           1,
-          [
-            BoxShadow(color: AppColors.accent.withValues(alpha: 0.22), blurRadius: 22, offset: const Offset(0, 8)),
-            BoxShadow(color: AppColors.accent.withValues(alpha: 0.1), blurRadius: 8, offset: const Offset(0, 2)),
+          const [
+            BoxShadow(color: Color(0x473D2F4A), blurRadius: 24, spreadRadius: -7, offset: Offset(0, 8)),
+            BoxShadow(color: Color(0x1F3D2F4A), blurRadius: 8, spreadRadius: -2, offset: Offset(0, 3)),
           ],
         ),
       _ => (
           AppColors.card,
           AppColors.border,
           1,
-          [
-            BoxShadow(color: AppColors.accent.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, 6)),
+          const [
+            BoxShadow(color: Color(0x383D2F4A), blurRadius: 20, spreadRadius: -6, offset: Offset(0, 6)),
+            BoxShadow(color: Color(0x143D2F4A), blurRadius: 6, spreadRadius: -2, offset: Offset(0, 2)),
           ],
         ),
     };
@@ -141,20 +150,11 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
   }
 
   (Color bg, Color fg, Color border) _voteColors() {
-    final active = _voted;
-    if (widget.showRank && widget.rank <= 2) {
-      return active
-          ? (AppColors.accent, AppColors.accentForeground, AppColors.accent)
-          : (AppColors.card, AppColors.accent, AppColors.accent);
+    // Matches web `voteButtonClasses` — same for every rank.
+    if (_voted) {
+      return (AppColors.accent, AppColors.accentForeground, AppColors.accent);
     }
-    if (widget.showRank && widget.rank == 3) {
-      return active
-          ? (AppColors.accent, AppColors.accentForeground, AppColors.accent)
-          : (AppColors.card, AppColors.foreground, AppColors.rank3Border);
-    }
-    return active
-        ? (AppColors.primary.withValues(alpha: 0.15), AppColors.accent, AppColors.accent.withValues(alpha: 0.6))
-        : (AppColors.card, AppColors.foreground, AppColors.border);
+    return (Colors.white, AppColors.accent, AppColors.accent);
   }
 
   (Color bg, Color fg) _pricePillColors() {
@@ -169,7 +169,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
 
   Future<void> _toggleVote() async {
     if (ref.read(sessionProvider) == null) {
-      if (mounted) context.push('/login');
+      if (mounted) context.go('/profile');
       return;
     }
     setState(() => _voting = true);
@@ -207,7 +207,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
 
   Future<void> _toggleSave() async {
     if (ref.read(sessionProvider) == null) {
-      if (mounted) context.push('/login');
+      if (mounted) context.go('/profile');
       return;
     }
     setState(() => _saving = true);
@@ -251,10 +251,12 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
   Future<void> _onCta() async {
     final pattern = widget.pattern;
     final showDownload = pattern.isFree && pattern.hasPdf;
+    final api = ref.read(apiClientProvider);
     if (showDownload) {
       setState(() => _ctaLoading = true);
       try {
-        final result = await ref.read(apiClientProvider).getData(
+        Analytics.trackPatternCta(api, pattern.id, 'pdf');
+        final result = await api.getData(
               '/patterns/${pattern.id}/pdf',
               map: (j) => j as Map<String, dynamic>,
             );
@@ -268,6 +270,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
       return;
     }
     if (pattern.patternUrl != null) {
+      Analytics.trackPatternCta(api, pattern.id, 'view');
       if (mounted) {
         await openInAppWebView(
           context,
@@ -301,94 +304,118 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
     final radius = BorderRadius.circular(16);
 
     return Padding(
-      padding: EdgeInsets.only(top: widget.showRank ? 12 : 0),
+      padding: EdgeInsets.only(top: widget.showRank ? 8 : 0),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
-              final half = constraints.maxWidth / 2;
+              // Outer height from outer width. Do not size Row children to this
+              // value — BoxDecoration.border insets the child, so fixed half×half
+              // children overflow by ~2×borderWidth.
+              final height = constraints.maxWidth / 2;
               return SizedBox(
-                height: half,
+                height: height,
                 child: GestureDetector(
                   onTap: _openGallery,
                   behavior: HitTestBehavior.opaque,
                   child: Container(
+                    // Border + shadow on the outer shell so the frame is visible
+                    // immediately (before images load) and isn’t covered by content.
                     decoration: BoxDecoration(
                       color: bg,
                       borderRadius: radius,
+                      border: Border.all(color: border, width: borderWidth),
                       boxShadow: shadows,
                     ),
-                    // Paint border above the image so it frames the full card.
-                    foregroundDecoration: BoxDecoration(
-                      borderRadius: radius,
-                      border: Border.all(color: border, width: borderWidth),
-                    ),
                     child: ClipRRect(
-                      borderRadius: radius,
+                      borderRadius: BorderRadius.circular(
+                        (16 - borderWidth).clamp(0, 16),
+                      ),
                       child: Row(
                         children: [
-                          SizedBox(
-                            width: half,
-                            height: half,
+                          // Square pane from inner height so border inset can't
+                          // make the gallery slightly wider than tall.
+                          AspectRatio(
+                            aspectRatio: 1,
                             child: _buildGallery(images, bg),
                           ),
-                          SizedBox(
-                            width: half,
-                            height: half,
+                          Expanded(
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    pattern.title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 15,
-                                      height: 1.2,
-                                      color: AppColors.foreground,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    pattern.designerName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 12,
-                                      color: AppColors.foreground,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: pillBg,
-                                      borderRadius: BorderRadius.circular(999),
-                                      boxShadow: _onPodium
-                                          ? [
-                                              BoxShadow(
-                                                color: AppColors.accent.withValues(alpha: 0.08),
-                                                blurRadius: 6,
-                                                offset: const Offset(0, 1),
+                                  Expanded(
+                                    child: Align(
+                                      alignment: Alignment.topLeft,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            pattern.title,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 15,
+                                              height: 1.2,
+                                              color: AppColors.foreground,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          GestureDetector(
+                                            behavior: HitTestBehavior.translucent,
+                                            onTap: () => context.push(creatorPath(pattern.designerName)),
+                                            child: _ExpandHitTest(
+                                              vertical: 12,
+                                              child: SizedBox(
+                                                width: double.infinity,
+                                                child: Text(
+                                                  pattern.designerName,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 12,
+                                                    color: AppColors.foreground,
+                                                    decoration: TextDecoration.underline,
+                                                    decorationColor: AppColors.foreground,
+                                                  ),
+                                                ),
                                               ),
-                                            ]
-                                          : null,
-                                    ),
-                                    child: Text(
-                                      pattern.isFree ? 'Free' : 'Paid',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: pillFg,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: pillBg,
+                                              borderRadius: BorderRadius.circular(999),
+                                              boxShadow: _onPodium
+                                                  ? [
+                                                      BoxShadow(
+                                                        color: AppColors.accent.withValues(alpha: 0.08),
+                                                        blurRadius: 6,
+                                                        offset: const Offset(0, 1),
+                                                      ),
+                                                    ]
+                                                  : null,
+                                            ),
+                                            child: Text(
+                                              pattern.isFree ? 'Free' : 'Paid',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: pillFg,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ),
-                                  const Spacer(),
                                   Row(
                                     children: [
                                       Expanded(
@@ -408,7 +435,11 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
                                               mainAxisAlignment: MainAxisAlignment.center,
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                Icon(Icons.arrow_upward_rounded, size: 18, color: voteFg),
+                                                ArrowBigUpIcon(
+                                                  size: 20,
+                                                  color: voteFg,
+                                                  filled: _voted,
+                                                ),
                                                 const SizedBox(width: 2),
                                                 Text('$_voteCount'),
                                               ],
@@ -512,7 +543,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
               itemBuilder: (context, index) {
                 return CachedNetworkImage(
                   imageUrl: images[index],
-                  fit: BoxFit.contain,
+                  fit: BoxFit.cover,
                   alignment: Alignment.center,
                 );
               },
@@ -520,22 +551,16 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
           Positioned(
             right: 8,
             top: 8,
-            child: Material(
-              color: AppColors.card.withValues(alpha: 0.55),
-              shape: const CircleBorder(),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: _saving ? null : _toggleSave,
-                onLongPress: _saving ? null : _openSaveSheet,
-                child: SizedBox(
-                  width: 30,
-                  height: 30,
-                  child: Icon(
-                    _saved ? Icons.bookmark : Icons.bookmark_outline,
-                    size: 16,
-                    color: _saved ? AppColors.accent : AppColors.foreground,
-                  ),
-                ),
+            child: _GlassCircleButton(
+              size: 30,
+              backgroundAlpha: 0.45,
+              blurSigma: 4,
+              onTap: _saving ? null : _toggleSave,
+              onLongPress: _saving ? null : _openSaveSheet,
+              child: Icon(
+                _saved ? Icons.bookmark : Icons.bookmark_outline,
+                size: 16,
+                color: _saved ? AppColors.accent : AppColors.foreground,
               ),
             ),
           ),
@@ -585,18 +610,102 @@ class _GalleryArrowButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.card.withValues(alpha: 0.7),
-      shape: const CircleBorder(),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: SizedBox(
-          width: 28,
-          height: 28,
-          child: Icon(icon, size: 20, color: AppColors.accent),
+    return _GlassCircleButton(
+      size: 28,
+      backgroundAlpha: 0.35,
+      blurSigma: 2,
+      onTap: onTap,
+      child: Icon(icon, size: 20, color: AppColors.foreground),
+    );
+  }
+}
+
+/// Matches web `bg-card/35`–`/45` + light backdrop blur on gallery controls.
+class _GlassCircleButton extends StatelessWidget {
+  const _GlassCircleButton({
+    required this.size,
+    required this.backgroundAlpha,
+    required this.blurSigma,
+    required this.child,
+    this.onTap,
+    this.onLongPress,
+  });
+
+  final double size;
+  final double backgroundAlpha;
+  final double blurSigma;
+  final Widget child;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipOval(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+        child: Material(
+          color: AppColors.card.withValues(alpha: backgroundAlpha),
+          child: InkWell(
+            onTap: onTap,
+            onLongPress: onLongPress,
+            customBorder: const CircleBorder(),
+            child: SizedBox(
+              width: size,
+              height: size,
+              child: Center(child: child),
+            ),
+          ),
         ),
       ),
     );
+  }
+}
+
+/// Expands hit-testing beyond the child's layout size without changing layout.
+class _ExpandHitTest extends SingleChildRenderObjectWidget {
+  const _ExpandHitTest({
+    required this.vertical,
+    required Widget child,
+  }) : super(child: child);
+
+  final double vertical;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderExpandHitTest(vertical: vertical);
+  }
+
+  @override
+  void updateRenderObject(BuildContext context, RenderObject renderObject) {
+    (renderObject as _RenderExpandHitTest).vertical = vertical;
+  }
+}
+
+class _RenderExpandHitTest extends RenderProxyBox {
+  _RenderExpandHitTest({required double vertical}) : _vertical = vertical;
+
+  double _vertical;
+
+  set vertical(double value) {
+    if (_vertical == value) return;
+    _vertical = value;
+  }
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    final expanded = Rect.fromLTRB(
+      0,
+      -_vertical,
+      size.width,
+      size.height + _vertical,
+    );
+    if (!expanded.contains(position)) return false;
+
+    if (child?.hitTest(result, position: position) ?? false) {
+      return true;
+    }
+
+    result.add(BoxHitTestEntry(this, position));
+    return true;
   }
 }

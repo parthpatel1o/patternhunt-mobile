@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +5,8 @@ import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../shared/widgets/app_empty_state.dart';
+import '../../shared/widgets/pattern_card_widget.dart';
 
 class BoardDetailScreen extends ConsumerWidget {
   const BoardDetailScreen({super.key, required this.boardId});
@@ -17,7 +18,8 @@ class BoardDetailScreen extends ConsumerWidget {
     final boardsAsync = ref.watch(boardsWithPatternsProvider);
 
     return boardsAsync.when(
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(body: Center(child: Text('$e'))),
       data: (groups) {
         BoardWithPatterns? group;
@@ -28,73 +30,189 @@ class BoardDetailScreen extends ConsumerWidget {
           }
         }
         if (group == null) {
-          return const Scaffold(body: Center(child: Text('Folder not found')));
+          return Scaffold(
+            appBar: AppBar(),
+            body: const Center(child: Text('Folder not found')),
+          );
         }
+
+        final board = group.board;
+        final patterns = group.patterns;
+        final countLabel = patterns.length == 1
+            ? '1 pattern in this folder'
+            : '${patterns.length} patterns in this folder';
+
         return Scaffold(
-          appBar: AppBar(title: Text(group.board.name)),
-          body: group.patterns.isEmpty
-              ? const Center(child: Text('No patterns in this folder'))
-              : GridView.builder(
-                  padding: const EdgeInsets.all(16),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.85,
-                  ),
-                  itemCount: group.patterns.length,
-                  itemBuilder: (context, index) {
-                    final pattern = group!.patterns[index];
-                    return Dismissible(
-                      key: ValueKey(pattern.id),
-                      direction: DismissDirection.endToStart,
-                      background: Container(
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.only(right: 16),
-                        color: Colors.red.shade100,
-                        child: const Icon(Icons.delete_outline),
-                      ),
-                      confirmDismiss: (_) async {
-                        try {
-                          await ref.read(apiClientProvider).delete('/patterns/${pattern.id}/save');
-                          ref.invalidate(boardsWithPatternsProvider);
-                          invalidatePatternSaveState(ref, pattern.id);
-                          return true;
-                        } on ApiException catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-                          }
-                          return false;
-                        }
-                      },
-                      child: InkWell(
-                        onTap: () => context.push('/pattern/${pattern.id}'),
-                        borderRadius: BorderRadius.circular(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: ColoredBox(
-                                  color: AppColors.card,
-                                  child: CachedNetworkImage(
-                                    imageUrl: pattern.imageUrls.first,
-                                    fit: BoxFit.contain,
-                                  ),
-                                ),
+          backgroundColor: AppColors.background,
+          body: RefreshIndicator(
+            onRefresh: () async => ref.invalidate(boardsWithPatternsProvider),
+            color: AppColors.accent,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () => context.pop(),
+                            icon: const Icon(Icons.arrow_back, size: 16),
+                            label: const Text('All folders'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.muted,
+                              backgroundColor: AppColors.card,
+                              side: const BorderSide(color: AppColors.border),
+                              shape: const StadiumBorder(),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                              textStyle: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
                               ),
                             ),
-                            const SizedBox(height: 6),
-                            Text(pattern.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-                          ],
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  board.name,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .displaySmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 32,
+                                      ),
+                                ),
+                              ),
+                              OutlinedButton(
+                                onPressed: () => _deleteBoard(
+                                  context,
+                                  ref,
+                                  board.id,
+                                  board.name,
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.muted,
+                                  side: const BorderSide(color: AppColors.border),
+                                  shape: const StadiumBorder(),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                child: const Text('Delete folder'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            countLabel,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(color: AppColors.muted),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                if (patterns.isEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
+                      child: AppEmptyState(
+                        emoji: '📁',
+                        title: 'This folder is empty',
+                        description:
+                            'Bookmark a pattern and save it to “${board.name}”.',
+                        action: EmptyStatePillButton(
+                          label: 'Browse the rank board',
+                          filled: true,
+                          onPressed: () => context.go('/'),
                         ),
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final pattern = patterns[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            child: PatternCardWidget(
+                              pattern: pattern,
+                              rank: index + 1,
+                              showRank: false,
+                            ),
+                          );
+                        },
+                        childCount: patterns.length,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         );
       },
     );
+  }
+
+  Future<void> _deleteBoard(
+    BuildContext context,
+    WidgetRef ref,
+    String boardId,
+    String name,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete folder?'),
+        content: Text('Delete “$name”? Patterns stay saved in other folders.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+                backgroundColor: AppColors.destructive),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref
+          .read(apiClientProvider)
+          .delete('/boards', query: {'boardId': boardId});
+      ref.invalidate(boardsWithPatternsProvider);
+      ref.invalidate(boardsProvider);
+      if (context.mounted) context.go('/saved');
+    } on ApiException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
   }
 }

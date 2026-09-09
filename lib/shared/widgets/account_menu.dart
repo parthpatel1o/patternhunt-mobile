@@ -1,73 +1,127 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/providers/providers.dart';
+import '../../core/theme/app_colors.dart';
 
-void showAccountMenu(BuildContext context, WidgetRef ref) {
+/// Account avatar + dropdown matching web AccountMenu (minus Admin).
+Future<void> showAccountMenu(BuildContext context, WidgetRef ref) async {
   final profile = ref.read(profileProvider).valueOrNull;
   final session = ref.read(sessionProvider);
+  final email = profile?.email ?? session?.user.email;
+  final isDesigner = profile?.isPatternDesigner ?? false;
 
-  showModalBottomSheet<void>(
+  await showModalBottomSheet<void>(
     context: context,
-    showDragHandle: true,
-    builder: (context) {
+    backgroundColor: AppColors.card,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (ctx) {
       return SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (session != null && profile?.email != null)
-              ListTile(
-                leading: const Icon(Icons.person_outline),
-                title: Text(profile!.displayName ?? profile.email!),
-                subtitle: Text(profile.email!),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
               ),
-            if (profile?.isPatternDesigner ?? false)
-              ListTile(
-                leading: const Icon(Icons.grid_view_outlined),
-                title: const Text('My patterns'),
+              if (email != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  child: Text(
+                    email,
+                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+                  ),
+                ),
+              if (isDesigner) ...[
+                _MenuTile(
+                  icon: Icons.grid_view_rounded,
+                  label: 'My patterns',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    context.go('/mine');
+                  },
+                ),
+                _MenuTile(
+                  icon: Icons.insights_outlined,
+                  label: 'Insights',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    context.push('/insights');
+                  },
+                ),
+              ],
+              _MenuTile(
+                icon: Icons.bookmark_outline,
+                label: 'Saved',
                 onTap: () {
-                  Navigator.pop(context);
-                  context.push('/mine');
+                  Navigator.pop(ctx);
+                  context.go('/saved');
                 },
               ),
-            ListTile(
-              leading: const Icon(Icons.person_outline),
-              title: const Text('Profile'),
-              onTap: () {
-                Navigator.pop(context);
-                context.go('/profile');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: const Text('Settings'),
-              onTap: () {
-                Navigator.pop(context);
-                context.go('/settings');
-              },
-            ),
-            if (session == null)
-              ListTile(
-                leading: const Icon(Icons.login),
-                title: const Text('Log in'),
+              _MenuTile(
+                icon: Icons.person_outline,
+                label: 'Profile',
                 onTap: () {
-                  Navigator.pop(context);
-                  context.push('/login');
+                  Navigator.pop(ctx);
+                  context.go('/profile');
                 },
-              )
-            else
-              ListTile(
-                leading: const Icon(Icons.logout),
-                title: const Text('Log out'),
+              ),
+              const Divider(height: 20),
+              _MenuTile(
+                icon: Icons.logout,
+                label: 'Log out',
+                destructive: true,
                 onTap: () async {
-                  Navigator.pop(context);
-                  await ref.read(authSignOutProvider)();
-                  if (context.mounted) context.go('/login');
+                  Navigator.pop(ctx);
+                  await Supabase.instance.client.auth.signOut();
+                  if (context.mounted) context.go('/');
                 },
               ),
-          ],
+            ],
+          ),
         ),
       );
     },
   );
+}
+
+class _MenuTile extends StatelessWidget {
+  const _MenuTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.destructive = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = destructive ? AppColors.destructive : AppColors.foreground;
+    return ListTile(
+      leading: Icon(icon, color: color, size: 22),
+      title: Text(
+        label,
+        style: TextStyle(fontWeight: FontWeight.w600, color: color),
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onTap: onTap,
+    );
+  }
 }

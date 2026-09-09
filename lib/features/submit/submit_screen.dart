@@ -13,6 +13,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/images/square_crop.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/category_icons.dart';
 
 class SubmitScreen extends ConsumerStatefulWidget {
   const SubmitScreen({super.key});
@@ -24,12 +25,15 @@ class SubmitScreen extends ConsumerStatefulWidget {
 class _SubmitScreenState extends ConsumerState<SubmitScreen> {
   final _title = TextEditingController();
   final _url = TextEditingController();
+  final _designerName = TextEditingController();
   late String _category;
   bool _isFree = false;
   final List<File> _images = [];
   File? _pdf;
   bool _uploading = false;
   bool _preparing = false;
+  String? _error;
+  bool _designerNameSynced = false;
 
   static const _jpegQuality = 82;
 
@@ -43,6 +47,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
   void dispose() {
     _title.dispose();
     _url.dispose();
+    _designerName.dispose();
     super.dispose();
   }
 
@@ -338,15 +343,47 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     }
   }
 
-  Future<void> _submit() async {
-    if (_images.isEmpty) return;
+  Future<void> _submit({required bool needsDesignerName}) async {
+    final title = _title.text.trim();
+    final patternUrl = _url.text.trim();
+    final designerName = _designerName.text.trim();
 
-    setState(() => _uploading = true);
+    if (needsDesignerName && designerName.length < 2) {
+      setState(() => _error = 'Enter your designer name.');
+      return;
+    }
+    if (title.length < 2) {
+      setState(() => _error = 'Title is too short');
+      return;
+    }
+    if (_images.isEmpty) {
+      setState(() => _error = 'Add at least one photo');
+      return;
+    }
+    if (_isFree) {
+      if (_pdf == null && patternUrl.isEmpty) {
+        setState(() => _error = 'Free patterns need a PDF or an external pattern URL');
+        return;
+      }
+    } else if (patternUrl.isEmpty) {
+      setState(() => _error = 'Paid patterns need an external pattern URL');
+      return;
+    }
+    if (patternUrl.isNotEmpty &&
+        !(patternUrl.startsWith('http://') || patternUrl.startsWith('https://'))) {
+      setState(() => _error = 'Pattern URL must start with http:// or https://');
+      return;
+    }
+
+    setState(() {
+      _error = null;
+      _uploading = true;
+    });
     try {
       final api = ref.read(apiClientProvider);
       final urls = await api.post('/patterns/upload-urls', data: {
         'imageCount': _images.length,
-        'hasPdf': _pdf != null,
+        'hasPdf': _isFree && _pdf != null,
       });
 
       final imageSlots = (urls['images'] as List<dynamic>? ?? [])
@@ -356,7 +393,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
       if (imageSlots.length != _images.length) {
         throw ApiException('Could not prepare image uploads.');
       }
-      if (_pdf != null && pdfSlot == null) {
+      if (_isFree && _pdf != null && pdfSlot == null) {
         throw ApiException('Could not prepare PDF upload.');
       }
 
@@ -367,7 +404,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
             _images[i],
             imageSlots[i]['contentType'] as String? ?? 'image/jpeg',
           ),
-        if (_pdf != null && pdfSlot != null)
+        if (_isFree && _pdf != null && pdfSlot != null)
           _putToSignedUrl(
             pdfSlot['uploadUrl'] as String,
             _pdf!,
@@ -375,30 +412,30 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
           ),
       ]);
 
-      await api.post('/patterns', data: {
+      final payload = <String, dynamic>{
         'patternId': urls['patternId'],
-        'title': _title.text.trim(),
-        'patternUrl': _url.text.trim(),
+        'title': title,
+        'patternUrl': patternUrl,
         'isFree': _isFree,
         'categorySlug': _category,
         'imageKeys': imageSlots.map((s) => s['key']).toList(),
-        'pdfKey': pdfSlot?['key'],
-      });
+        'pdfKey': (_isFree && pdfSlot != null) ? pdfSlot['key'] : null,
+      };
+      if (needsDesignerName) {
+        payload['designerName'] = designerName;
+      }
+      await api.post('/patterns', data: payload);
 
       ref.invalidate(myPatternsProvider);
       ref.invalidate(patternsProvider);
+      ref.invalidate(profileProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pattern submitted!')));
         context.go('/');
       }
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) setState(() => _error = e.message);
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Upload failed. Please try again.')),
-        );
-      }
+      if (mounted) setState(() => _error = 'We couldn’t save this pattern.');
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -407,156 +444,323 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
   @override
   Widget build(BuildContext context) {
     final profile = ref.watch(profileProvider).valueOrNull;
-    if (profile != null && !profile.isPatternDesigner) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Turn on pattern designer in Settings before submitting.'),
-              const SizedBox(height: 16),
-              FilledButton(onPressed: () => context.go('/profile'), child: const Text('Go to profile')),
-            ],
-          ),
-        ),
-      );
+    final displayName = profile?.displayName?.trim() ?? '';
+    final needsDesignerName =
+        profile == null || !profile.isPatternDesigner || displayName.length < 2;
+    if (needsDesignerName && !_designerNameSynced) {
+      _designerNameSynced = true;
+      if (displayName.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _designerName.text = displayName;
+        });
+      }
     }
-    if (profile != null && (profile.displayName == null || profile.displayName!.trim().isEmpty)) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Add your designer name in Settings before submitting.'),
-              const SizedBox(height: 16),
-              FilledButton(onPressed: () => context.go('/profile'), child: const Text('Go to profile')),
-            ],
-          ),
+
+    final categories = AppConstants.instance.categories;
+    final textTheme = Theme.of(context).textTheme;
+
+    InputDecoration fieldDecoration(String? hint) {
+      return InputDecoration(
+        hintText: hint,
+        filled: true,
+        fillColor: AppColors.background,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
         ),
       );
     }
 
-    final categories = AppConstants.instance.categories;
+    Widget fieldLabel(String text) {
+      return Text(
+        text,
+        style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, fontSize: 14),
+      );
+    }
+
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
       children: [
-        TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title')),
-        const SizedBox(height: 12),
-        Text('Is this pattern free or paid?', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _ChoiceChip(
-                selected: !_isFree,
-                icon: Icons.attach_money,
-                label: 'Paid',
-                onTap: () => setState(() {
-                  _isFree = false;
-                  _pdf = null;
-                }),
+        Text(
+          'Patterns go live on the rank board immediately.',
+          textAlign: TextAlign.center,
+          style: textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+        ),
+        const SizedBox(height: 28),
+        _SubmitSection(
+          title: 'Pattern',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (needsDesignerName) ...[
+                fieldLabel('Designer name'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _designerName,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: fieldDecoration('Woolly Studio'),
+                ),
+                const SizedBox(height: 16),
+              ],
+              fieldLabel('Pattern name'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _title,
+                textCapitalization: TextCapitalization.sentences,
+                maxLength: 80,
+                decoration: fieldDecoration('Tiny frog plushie').copyWith(counterText: ''),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _ChoiceChip(
-                selected: _isFree,
-                icon: Icons.card_giftcard_outlined,
-                label: 'Free',
-                onTap: () => setState(() => _isFree = true),
+              const SizedBox(height: 16),
+              fieldLabel('Is this pattern free or paid?'),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _ChoiceChip(
+                      selected: !_isFree,
+                      label: 'Paid',
+                      onTap: () => setState(() {
+                        _isFree = false;
+                        _pdf = null;
+                      }),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _ChoiceChip(
+                      selected: _isFree,
+                      label: 'Free',
+                      onTap: () => setState(() => _isFree = true),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              fieldLabel('Category'),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final c in categories)
+                    _ChoiceChip(
+                      selected: _category == c.slug,
+                      icon: categoryIcon(c.slug),
+                      label: c.name,
+                      onTap: () => setState(() => _category = c.slug),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 16),
-        Text('Category', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final c in categories)
-              _ChoiceChip(
-                selected: _category == c.slug,
-                icon: _categoryIcon(c.slug),
-                label: c.name,
-                onTap: () => setState(() => _category = c.slug),
+        _SubmitSection(
+          title: 'Photos',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Choose one or more photos. The cover photo must be square.',
+                style: textTheme.bodySmall?.copyWith(color: AppColors.muted),
               ),
-          ],
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  for (var i = 0; i < _images.length; i++) _photoTile(i),
+                  if (_images.length < AppConstants.instance.maxPatternImages)
+                    _addPhotosCard(AppConstants.instance.maxPatternImages - _images.length),
+                ],
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 16),
-        TextField(controller: _url, decoration: const InputDecoration(labelText: 'Pattern URL')),
-        if (_isFree) ...[
-          const SizedBox(height: 8),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.picture_as_pdf_outlined),
-            title: Text(_pdf == null ? 'Add PDF (optional)' : _pdf!.path.split('/').last),
-            trailing: _pdf != null
-                ? IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => _pdf = null))
-                : null,
-            onTap: _pickPdf,
+        _SubmitSection(
+          title: 'Where to get it',
+          hint: _isFree ? 'Add a link, a PDF, or both.' : 'Add the shop or listing link.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              fieldLabel(
+                _isFree ? 'Pattern URL (optional if you upload a PDF)' : 'Pattern URL',
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _url,
+                keyboardType: TextInputType.url,
+                decoration: fieldDecoration('https://'),
+              ),
+              if (_isFree) ...[
+                const SizedBox(height: 16),
+                fieldLabel('PDF'),
+                const SizedBox(height: 4),
+                Text(
+                  'Up to 20 MB.',
+                  style: textTheme.bodySmall?.copyWith(color: AppColors.muted),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    OutlinedButton(
+                      onPressed: _uploading ? null : _pickPdf,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.foreground,
+                        backgroundColor: AppColors.card,
+                        side: const BorderSide(color: AppColors.border),
+                        shape: const StadiumBorder(),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
+                      child: Text(_pdf == null ? 'Choose PDF' : 'Replace PDF'),
+                    ),
+                    if (_pdf != null) ...[
+                      const SizedBox(width: 12),
+                      TextButton(
+                        onPressed: () => setState(() => _pdf = null),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.muted,
+                          textStyle: const TextStyle(
+                            decoration: TextDecoration.underline,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        child: const Text('Remove'),
+                      ),
+                    ],
+                  ],
+                ),
+                if (_pdf != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _pdf!.path.split('/').last,
+                    style: textTheme.bodySmall?.copyWith(color: AppColors.muted),
+                  ),
+                ],
+              ],
+            ],
+          ),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 16),
+          Text(
+            _error!,
+            style: textTheme.bodySmall?.copyWith(color: AppColors.destructive, fontWeight: FontWeight.w600),
           ),
         ],
-        const SizedBox(height: 12),
-        Text(
-          'Choose one or more photos. Square photos preferred — tap crop on a photo if you want a square crop.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (var i = 0; i < _images.length; i++) _photoTile(i),
-            if (_images.length < AppConstants.instance.maxPatternImages)
-              _addPhotosCard(AppConstants.instance.maxPatternImages - _images.length),
-          ],
-        ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
         FilledButton(
-          onPressed: _uploading || _preparing || _images.isEmpty ? null : _submit,
-          child: Text(_uploading ? 'Uploading…' : 'Submit pattern'),
+          onPressed: _uploading || _preparing
+              ? null
+              : () => _submit(needsDesignerName: needsDesignerName),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.accent,
+            foregroundColor: AppColors.accentForeground,
+            disabledBackgroundColor: AppColors.accent.withValues(alpha: 0.6),
+            shape: const StadiumBorder(),
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+          ),
+          child: Text(_uploading ? 'Publishing…' : 'Publish pattern'),
         ),
       ],
     );
   }
 }
 
-IconData _categoryIcon(String slug) {
-  switch (slug) {
-    case 'amigurumi':
-      return Icons.cruelty_free_outlined;
-    case 'wearables':
-      return Icons.checkroom_outlined;
-    case 'accessories':
-      return Icons.diamond_outlined;
-    default:
-      return Icons.category_outlined;
+class _SubmitSection extends StatelessWidget {
+  const _SubmitSection({
+    required this.title,
+    required this.child,
+    this.hint,
+  });
+
+  final String title;
+  final String? hint;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(19),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x383D2F4A),
+            blurRadius: 20,
+            spreadRadius: -6,
+            offset: Offset(0, 6),
+          ),
+          BoxShadow(
+            color: Color(0x143D2F4A),
+            blurRadius: 6,
+            spreadRadius: -2,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 20,
+                ),
+          ),
+          if (hint != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              hint!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+            ),
+          ],
+          const SizedBox(height: 16),
+          child,
+        ],
+      ),
+    );
   }
 }
 
 class _ChoiceChip extends StatelessWidget {
   const _ChoiceChip({
     required this.selected,
-    required this.icon,
     required this.label,
     required this.onTap,
+    this.icon,
   });
 
   final bool selected;
-  final IconData icon;
+  final IconData? icon;
   final String label;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? AppColors.primary : AppColors.card,
+      color: selected ? AppColors.primary : AppColors.background,
+      elevation: selected ? 1 : 0,
+      shadowColor: const Color(0x293D2F4A),
       shape: StadiumBorder(
-        side: BorderSide(color: selected ? AppColors.primaryStrong : AppColors.border),
+        side: BorderSide(color: selected ? AppColors.primary : AppColors.border),
       ),
       child: InkWell(
         customBorder: const StadiumBorder(),
@@ -564,14 +768,22 @@ class _ChoiceChip extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 18, color: selected ? AppColors.primaryForeground : AppColors.muted),
-              const SizedBox(width: 6),
+              if (icon != null) ...[
+                Icon(
+                  icon,
+                  size: 16,
+                  color: selected ? AppColors.primaryForeground : AppColors.muted,
+                ),
+                const SizedBox(width: 6),
+              ],
               Text(
                 label,
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
+                  fontSize: 14,
                   color: selected ? AppColors.primaryForeground : AppColors.muted,
                 ),
               ),

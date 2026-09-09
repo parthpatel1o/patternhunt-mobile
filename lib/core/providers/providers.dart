@@ -152,6 +152,17 @@ final myPatternsProvider = FutureProvider<List<PatternCard>>((ref) async {
   );
 });
 
+final insightsProvider = FutureProvider<DesignerInsights>((ref) async {
+  final session = ref.watch(sessionProvider);
+  if (session == null) throw StateError('Not logged in');
+  final api = ref.watch(apiClientProvider);
+  return api.getData(
+    '/me/insights',
+    accessToken: session.accessToken,
+    map: (json) => DesignerInsights.fromJson(json as Map<String, dynamic>),
+  );
+});
+
 void invalidatePatternSaveState(WidgetRef ref, String patternId) {
   ref.invalidate(patternDetailProvider(patternId));
   ref.invalidate(boardsWithPatternsProvider);

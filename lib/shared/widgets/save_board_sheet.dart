@@ -8,7 +8,7 @@ import '../../core/providers/providers.dart';
 Future<void> showSaveBoardSheet(BuildContext context, WidgetRef ref, String patternId) async {
   final session = ref.read(sessionProvider);
   if (session == null) {
-    if (context.mounted) context.push('/login');
+    if (context.mounted) context.go('/profile');
     return;
   }
 

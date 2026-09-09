@@ -12,12 +12,20 @@
     { "value": "week", "label": "Past 7 days" },
     { "value": "month", "label": "Past 30 days" }
   ],
+  "huntOrders": [
+    { "value": "random", "label": "Random" },
+    { "value": "newest", "label": "Newest to oldest" },
+    { "value": "oldest", "label": "Oldest to newest" }
+  ],
+  "defaultHuntOrder": "random",
+  "defaultHuntCategory": "all",
   "defaultRankBoardCategory": "amigurumi",
   "defaultUserCategory": "all",
   "maxImageBytes": 5242880,
   "maxPdfBytes": 20971520,
   "maxPatternImages": 15,
   "scoreboardPageSize": 20,
+  "huntPageSize": 20,
   "imageOutputSize": 1200,
   "imageAspect": 1,
   "imageAspectTolerance": 0.08,

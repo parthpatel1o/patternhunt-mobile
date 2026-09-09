@@ -10,9 +10,9 @@ import '../../features/auth/reset_password_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/mine/edit_pattern_screen.dart';
 import '../../features/mine/mine_screen.dart';
-import '../../features/pattern/pattern_detail_screen.dart';
+import '../../features/hunt/hunt_screen.dart';
+import '../../features/insights/insights_screen.dart';
 import '../../features/profile/creator_screen.dart';
-import '../../features/profile/profile_screen.dart';
 import '../../features/saved/board_detail_screen.dart';
 import '../../features/saved/saved_screen.dart';
 import '../../features/search/search_screen.dart';
@@ -56,39 +56,57 @@ final routerProvider = Provider<GoRouter>((ref) {
       final session = ref.read(sessionProvider);
       final loggingIn = state.matchedLocation == '/login';
       final recovery = ref.read(passwordRecoveryProvider);
+      final next = state.uri.queryParameters['next'];
       if (recovery && state.matchedLocation != '/reset-password') {
         return '/reset-password';
       }
       if (session == null &&
-          (['/submit', '/saved', '/mine'].contains(state.matchedLocation) ||
-              state.matchedLocation.startsWith('/mine/'))) {
-        return '/login';
+          (['/submit', '/saved', '/mine', '/insights'].contains(state.matchedLocation) ||
+              state.matchedLocation.startsWith('/mine/') ||
+              state.matchedLocation.startsWith('/saved/'))) {
+        return '/profile';
       }
-      if (session != null && state.matchedLocation == '/submit') {
+      if (session != null &&
+          (state.matchedLocation == '/insights' ||
+              state.matchedLocation == '/mine' ||
+              state.matchedLocation.startsWith('/mine/'))) {
         final profileAsync = ref.read(profileProvider);
         if (profileAsync.isLoading) return null;
         if (profileAsync.valueOrNull != null && !profileAsync.valueOrNull!.isPatternDesigner) {
           return '/profile';
         }
       }
-      if (session != null && loggingIn && !recovery) return '/';
+      if (session != null && loggingIn && !recovery) {
+        final safeNext = _safeInternalPath(next);
+        return safeNext ?? '/';
+      }
+      if (state.matchedLocation == '/settings') return '/profile';
       return null;
     },
     routes: [
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
         routes: [
-          GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+          GoRoute(path: '/', builder: (context, state) {
+            final q = state.uri.queryParameters['q'];
+            final patternId = state.uri.queryParameters['pattern'];
+            return HomeScreen(
+              key: ValueKey('home-${q ?? ''}-${patternId ?? ''}'),
+              initialQuery: q,
+              focusPatternId: patternId,
+            );
+          }),
+          GoRoute(path: '/hunt', builder: (context, state) => const HuntScreen()),
           GoRoute(path: '/saved', builder: (context, state) => const SavedScreen()),
           GoRoute(path: '/mine', builder: (context, state) => const MineScreen()),
           GoRoute(path: '/submit', builder: (context, state) => const SubmitScreen()),
-          GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
-          GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
+          GoRoute(path: '/profile', builder: (context, state) => const SettingsScreen()),
           GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
           GoRoute(path: '/reset-password', builder: (context, state) => const ResetPasswordScreen()),
         ],
       ),
       GoRoute(path: '/search', builder: (context, state) => const SearchScreen()),
+      GoRoute(path: '/insights', builder: (context, state) => const InsightsScreen()),
       GoRoute(
         path: '/mine/:id/edit',
         builder: (context, state) => EditPatternScreen(patternId: state.pathParameters['id']!),
@@ -96,10 +114,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/saved/:boardId',
         builder: (context, state) => BoardDetailScreen(boardId: state.pathParameters['boardId']!),
-      ),
-      GoRoute(
-        path: '/pattern/:id',
-        builder: (context, state) => PatternDetailScreen(patternId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/creator/:slug',
@@ -111,3 +125,12 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.onDispose(router.dispose);
   return router;
 });
+
+/// Only allow in-app relative paths for post-login redirects.
+String? _safeInternalPath(String? next) {
+  if (next == null || next.isEmpty) return null;
+  final decoded = Uri.decodeComponent(next);
+  if (!decoded.startsWith('/') || decoded.startsWith('//')) return null;
+  if (decoded.startsWith('/login')) return null;
+  return decoded;
+}
