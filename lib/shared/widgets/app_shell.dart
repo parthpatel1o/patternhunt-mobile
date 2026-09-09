@@ -7,17 +7,41 @@ import '../../features/saved/create_folder_dialog.dart';
 import '../../features/search/search_overlay.dart';
 
 class AppShell extends ConsumerWidget {
-  const AppShell({super.key, required this.child});
+  const AppShell({super.key, required this.navigationShell});
 
-  final Widget child;
+  final StatefulNavigationShell navigationShell;
 
   /// Stable key so search can expand from the AppBar icon bounds.
   static final searchButtonKey = GlobalKey();
+
+  /// Branch index order must match [StatefulShellRoute] branches in router.dart.
+  static const _branchByRoute = <String, int>{
+    '/': 0,
+    '/hunt': 1,
+    '/saved': 2,
+    '/mine': 3,
+    '/profile': 4,
+    '/submit': 5,
+    '/insights': 6,
+    '/login': 7,
+    '/reset-password': 8,
+  };
 
   static bool _isImmersive(String location) {
     return location.startsWith('/login') ||
         location.startsWith('/reset-password') ||
         location.startsWith('/hunt');
+  }
+
+  void _onTabSelected(int index, List<_NavItem> items) {
+    final route = items[index].route;
+    final branchIndex = _branchByRoute[route];
+    if (branchIndex == null) return;
+    navigationShell.goBranch(
+      branchIndex,
+      // Tapping the active tab returns to that tab’s root.
+      initialLocation: branchIndex == navigationShell.currentIndex,
+    );
   }
 
   @override
@@ -81,41 +105,53 @@ class AppShell extends ConsumerWidget {
         location.startsWith('/settings') ||
         location.startsWith('/insights');
 
+    final titleWidget = isHome
+        ? Row(
+            key: const ValueKey('title-home'),
+            children: [
+              Image.asset('assets/logo.png', width: 26, height: 26),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Pattern Hunt',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 17,
+                        height: 1.1,
+                        color: AppColors.accent,
+                      ),
+                ),
+              ),
+            ],
+          )
+        : Text(
+            pageTitle,
+            key: ValueKey('title-$pageTitle'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: useLargePageTitle ? 22 : 17,
+                  height: 1.1,
+                  color: AppColors.foreground,
+                ),
+          );
+
     return Scaffold(
       appBar: hideAppBar
           ? null
           : AppBar(
-              title: isHome
-                  ? Row(
-                      children: [
-                        Image.asset('assets/logo.png', width: 26, height: 26),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'Pattern Hunt',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 17,
-                                  height: 1.1,
-                                  color: AppColors.accent,
-                                ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Text(
-                      pageTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            fontSize: useLargePageTitle ? 22 : 17,
-                            height: 1.1,
-                            color: AppColors.foreground,
-                          ),
-                    ),
+              title: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+                child: titleWidget,
+              ),
               titleSpacing: 16,
               actions: [
                 if (showHomeActions) ...[
@@ -161,19 +197,19 @@ class AppShell extends ConsumerWidget {
                       label: 'View insights',
                       icon: Icons.insights_outlined,
                       filled: false,
-                      onPressed: () => context.push('/insights'),
+                      onPressed: () => context.go('/insights'),
                     ),
                   ),
                 ],
               ],
             ),
-      body: child,
+      body: navigationShell,
       bottomNavigationBar: hideBottomNav
           ? null
           : _BrandBottomNav(
               items: items,
               selectedIndex: selectedIndex.clamp(0, items.length - 1),
-              onSelected: (index) => context.go(items[index].route),
+              onSelected: (index) => _onTabSelected(index, items),
             ),
     );
   }
@@ -427,7 +463,7 @@ class _BrandNavItem extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
+                duration: const Duration(milliseconds: 220),
                 curve: Curves.easeOutCubic,
                 padding: EdgeInsets.symmetric(
                   horizontal: selected ? 14 : 10,
@@ -437,23 +473,42 @@ class _BrandNavItem extends StatelessWidget {
                   color: selected ? AppColors.primary.withValues(alpha: 0.85) : Colors.transparent,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Icon(
-                  selected ? item.selectedIcon : item.icon,
-                  size: 22,
-                  color: color,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    return FadeTransition(
+                      opacity: animation,
+                      child: ScaleTransition(
+                        scale: Tween<double>(begin: 0.92, end: 1).animate(animation),
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: Icon(
+                    selected ? item.selectedIcon : item.icon,
+                    key: ValueKey(selected),
+                    size: 22,
+                    color: color,
+                  ),
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                item.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                   color: color,
                   height: 1.1,
                   letterSpacing: 0.1,
+                ),
+                child: Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

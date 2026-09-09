@@ -45,6 +45,26 @@ final _routerRefreshProvider = Provider<_RouterRefresh>((ref) {
   return notifier;
 });
 
+Page<void> _fadePage({
+  required LocalKey key,
+  required Widget child,
+}) {
+  return CustomTransitionPage<void>(
+    key: key,
+    child: child,
+    transitionDuration: const Duration(milliseconds: 180),
+    reverseTransitionDuration: const Duration(milliseconds: 140),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return FadeTransition(opacity: curved, child: child);
+    },
+  );
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = ref.watch(_routerRefreshProvider);
 
@@ -84,26 +104,119 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      ShellRoute(
-        builder: (context, state, child) => AppShell(child: child),
-        routes: [
-          GoRoute(path: '/', builder: (context, state) {
-            final q = state.uri.queryParameters['q'];
-            final patternId = state.uri.queryParameters['pattern'];
-            return HomeScreen(
-              key: ValueKey('home-${q ?? ''}-${patternId ?? ''}'),
-              initialQuery: q,
-              focusPatternId: patternId,
-            );
-          }),
-          GoRoute(path: '/hunt', builder: (context, state) => const HuntScreen()),
-          GoRoute(path: '/saved', builder: (context, state) => const SavedScreen()),
-          GoRoute(path: '/mine', builder: (context, state) => const MineScreen()),
-          GoRoute(path: '/submit', builder: (context, state) => const SubmitScreen()),
-          GoRoute(path: '/insights', builder: (context, state) => const InsightsScreen()),
-          GoRoute(path: '/profile', builder: (context, state) => const SettingsScreen()),
-          GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
-          GoRoute(path: '/reset-password', builder: (context, state) => const ResetPasswordScreen()),
+      // Indexed stack keeps tab screens mounted so switches stay smooth.
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
+          return AppShell(navigationShell: navigationShell);
+        },
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/',
+                pageBuilder: (context, state) {
+                  final q = state.uri.queryParameters['q'];
+                  final patternId = state.uri.queryParameters['pattern'];
+                  return _fadePage(
+                    key: state.pageKey,
+                    child: HomeScreen(
+                      key: ValueKey('home-${q ?? ''}-${patternId ?? ''}'),
+                      initialQuery: q,
+                      focusPatternId: patternId,
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/hunt',
+                pageBuilder: (context, state) => _fadePage(
+                  key: state.pageKey,
+                  child: const HuntScreen(),
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/saved',
+                pageBuilder: (context, state) => _fadePage(
+                  key: state.pageKey,
+                  child: const SavedScreen(),
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/mine',
+                pageBuilder: (context, state) => _fadePage(
+                  key: state.pageKey,
+                  child: const MineScreen(),
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/profile',
+                pageBuilder: (context, state) => _fadePage(
+                  key: state.pageKey,
+                  child: const SettingsScreen(),
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/submit',
+                pageBuilder: (context, state) => _fadePage(
+                  key: state.pageKey,
+                  child: const SubmitScreen(),
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/insights',
+                pageBuilder: (context, state) => _fadePage(
+                  key: state.pageKey,
+                  child: const InsightsScreen(),
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/login',
+                pageBuilder: (context, state) => _fadePage(
+                  key: state.pageKey,
+                  child: const LoginScreen(),
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/reset-password',
+                pageBuilder: (context, state) => _fadePage(
+                  key: state.pageKey,
+                  child: const ResetPasswordScreen(),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
       GoRoute(path: '/search', builder: (context, state) => const SearchScreen()),
