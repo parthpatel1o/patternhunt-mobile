@@ -23,7 +23,7 @@
   "defaultUserCategory": "all",
   "maxImageBytes": 5242880,
   "maxPdfBytes": 20971520,
-  "maxPatternImages": 15,
+  "maxPatternImages": 20,
   "scoreboardPageSize": 20,
   "huntPageSize": 20,
   "imageOutputSize": 1200,

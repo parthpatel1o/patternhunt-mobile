@@ -49,9 +49,12 @@ class AppShell extends ConsumerWidget {
         selectedIndex = i;
       }
     }
-    if (location.startsWith('/login') ||
+    if (location.startsWith('/submit')) {
+      selectedIndex = items.indexWhere((e) => e.route == '/mine');
+      if (selectedIndex < 0) selectedIndex = items.indexWhere((e) => e.route == '/profile');
+      if (selectedIndex < 0) selectedIndex = 0;
+    } else if (location.startsWith('/login') ||
         location.startsWith('/reset-password') ||
-        location.startsWith('/submit') ||
         location.startsWith('/settings') ||
         location.startsWith('/insights')) {
       selectedIndex = items.indexWhere((e) => e.route == '/profile');
@@ -67,6 +70,10 @@ class AppShell extends ConsumerWidget {
     final showHomeActions = isHome;
     final showSubmit = showHomeActions && isDesigner && !location.startsWith('/submit');
     final pageTitle = _titleForLocation(location);
+    final useLargePageTitle = location.startsWith('/saved') ||
+        location.startsWith('/mine') ||
+        location.startsWith('/profile') ||
+        location.startsWith('/settings');
 
     return Scaffold(
       appBar: hideAppBar
@@ -98,7 +105,7 @@ class AppShell extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
-                            fontSize: 17,
+                            fontSize: useLargePageTitle ? 22 : 17,
                             height: 1.1,
                             color: AppColors.foreground,
                           ),

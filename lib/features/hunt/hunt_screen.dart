@@ -471,7 +471,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 17,
+                    fontSize: 22,
                     fontWeight: FontWeight.w700,
                     height: 1.1,
                     color: AppColors.foreground,

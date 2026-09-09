@@ -321,30 +321,58 @@ class _FolderMosaic extends StatelessWidget {
 
   final List<String> previews;
 
+  /// Match web `SavedFolderCard`: 2-col grid, gap 6px; 1 image spans full width;
+  /// 3 images put the first on its own row spanning both columns.
   @override
   Widget build(BuildContext context) {
-    if (previews.length == 1) {
+    Widget tile(String url) {
       return ColoredBox(
         color: AppColors.background,
-        child: CachedNetworkImage(imageUrl: previews.first, fit: BoxFit.contain),
+        child: CachedNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.contain,
+          width: double.infinity,
+          height: double.infinity,
+        ),
       );
     }
-    return GridView.count(
-      crossAxisCount: 2,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.zero,
-      mainAxisSpacing: 6,
-      crossAxisSpacing: 6,
+
+    Widget row(List<String> urls) {
+      return Row(
+        children: [
+          for (var i = 0; i < urls.length; i++) ...[
+            if (i > 0) const SizedBox(width: 6),
+            Expanded(child: tile(urls[i])),
+          ],
+        ],
+      );
+    }
+
+    if (previews.length == 1) {
+      return tile(previews.first);
+    }
+
+    if (previews.length == 2) {
+      return row(previews);
+    }
+
+    if (previews.length == 3) {
+      return Column(
+        children: [
+          Expanded(child: tile(previews[0])),
+          const SizedBox(height: 6),
+          Expanded(child: row(previews.sublist(1))),
+        ],
+      );
+    }
+
+    return Column(
       children: [
-        for (var i = 0; i < previews.length; i++)
-          ColoredBox(
-            color: AppColors.background,
-            child: CachedNetworkImage(
-              imageUrl: previews[i],
-              fit: BoxFit.contain,
-            ),
-          ),
+        Expanded(child: row(previews.sublist(0, 2))),
+        const SizedBox(height: 6),
+        Expanded(child: row(previews.sublist(2, 4))),
       ],
     );
   }
 }
+

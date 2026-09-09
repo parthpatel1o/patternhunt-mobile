@@ -463,6 +463,11 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     InputDecoration fieldDecoration(String? hint) {
       return InputDecoration(
         hintText: hint,
+        hintStyle: const TextStyle(
+          color: AppColors.muted,
+          fontWeight: FontWeight.w500,
+          fontSize: 15,
+        ),
         filled: true,
         fillColor: AppColors.background,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -489,14 +494,8 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     }
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 40),
       children: [
-        Text(
-          'Patterns go live on the rank board immediately.',
-          textAlign: TextAlign.center,
-          style: textTheme.bodyMedium?.copyWith(color: AppColors.muted),
-        ),
-        const SizedBox(height: 28),
         _SubmitSection(
           title: 'Pattern',
           child: Column(

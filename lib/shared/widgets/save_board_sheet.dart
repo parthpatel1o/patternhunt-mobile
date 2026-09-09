@@ -5,6 +5,7 @@ import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import 'app_snack_bar.dart';
 
 Future<void> showSaveBoardSheet(BuildContext context, WidgetRef ref, String patternId) async {
   final session = ref.read(sessionProvider);
@@ -85,9 +86,7 @@ class _SaveBoardSheetBodyState extends ConsumerState<_SaveBoardSheetBody> {
       await api.post('/patterns/${widget.patternId}/save', data: {'boardId': board.id});
       widget.onChanged();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Saved to ${board.name}')),
-        );
+        showAppSnackBar(context, message: 'Saved to ${board.name}');
         Navigator.pop(context);
       }
     } on ApiException catch (e) {
@@ -112,9 +111,7 @@ class _SaveBoardSheetBodyState extends ConsumerState<_SaveBoardSheetBody> {
       widget.onChanged();
       if (mounted) {
         _newFolderController.clear();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Saved to $name')),
-        );
+        showAppSnackBar(context, message: 'Saved to $name');
         Navigator.pop(context);
       }
     } on ApiException catch (e) {

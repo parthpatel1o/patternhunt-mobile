@@ -15,6 +15,7 @@ import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/slugify.dart';
 import 'arrow_big_up_icon.dart';
+import 'app_snack_bar.dart';
 import 'photo_viewer.dart';
 import 'save_board_sheet.dart';
 import 'in_app_webview.dart';
@@ -219,23 +220,21 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
         await api.delete('/patterns/${widget.pattern.id}/save');
       } else {
         setState(() => _saved = true);
-        await api.post('/patterns/${widget.pattern.id}/save');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Saved'),
-              action: SnackBarAction(
-                label: 'Move',
-                onPressed: () => _openSaveSheet(),
-              ),
-            ),
+          showAppSnackBar(
+            context,
+            message: 'Saved',
+            actionLabel: 'Move',
+            onAction: _openSaveSheet,
           );
         }
+        await api.post('/patterns/${widget.pattern.id}/save');
       }
       invalidatePatternSaveState(ref, widget.pattern.id);
     } on ApiException catch (e) {
       if (mounted) {
         setState(() => _saved = previous);
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } finally {

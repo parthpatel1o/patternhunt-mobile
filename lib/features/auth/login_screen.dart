@@ -235,6 +235,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // OAuth (e.g. Google) sets the session without returning through `_submit`.
+    ref.listen(sessionProvider, (previous, next) {
+      if (previous == null && next != null && mounted) {
+        context.go(_resolveNextPath());
+      }
+    });
+
     if (_signupSuccessEmail != null) {
       return _buildSignupSuccess();
     }

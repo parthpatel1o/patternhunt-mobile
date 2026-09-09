@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
@@ -28,11 +29,13 @@ class _InAppWebViewScreenState extends State<InAppWebViewScreen> {
   var _progress = 0;
   String? _error;
   late final Uri? _initialUri;
+  Uri? _currentUri;
 
   @override
   void initState() {
     super.initState();
     _initialUri = _normalizeUrl(widget.url);
+    _currentUri = _initialUri;
 
     final params = WebViewPlatform.instance is WebKitWebViewPlatform
         ? WebKitWebViewControllerCreationParams(
@@ -46,11 +49,15 @@ class _InAppWebViewScreenState extends State<InAppWebViewScreen> {
       ..setBackgroundColor(AppColors.background)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (_) {
+          onPageStarted: (url) {
             if (!mounted) return;
+            final uri = Uri.tryParse(url);
             setState(() {
               _loading = true;
               _error = null;
+              if (uri != null && (uri.isScheme('http') || uri.isScheme('https'))) {
+                _currentUri = uri;
+              }
             });
             _armLoadingTimeout();
           },
@@ -128,6 +135,12 @@ class _InAppWebViewScreenState extends State<InAppWebViewScreen> {
     return uri;
   }
 
+  Future<void> _openInBrowser() async {
+    final uri = _currentUri ?? _initialUri;
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   @override
   void dispose() {
     _loadingTimeout?.cancel();
@@ -136,6 +149,8 @@ class _InAppWebViewScreenState extends State<InAppWebViewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final canOpenInBrowser = (_currentUri ?? _initialUri) != null;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -149,6 +164,20 @@ class _InAppWebViewScreenState extends State<InAppWebViewScreen> {
           tooltip: 'Close',
           onPressed: () => Navigator.of(context).maybePop(),
         ),
+        actions: [
+          if (canOpenInBrowser)
+            TextButton(
+              onPressed: _openInBrowser,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.accent,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+              child: const Text(
+                'Open in Browser',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -205,6 +234,13 @@ class _InAppWebViewScreenState extends State<InAppWebViewScreen> {
                             },
                             child: const Text('Try again'),
                           ),
+                          if (canOpenInBrowser) ...[
+                            const SizedBox(height: 8),
+                            TextButton(
+                              onPressed: _openInBrowser,
+                              child: const Text('Open in Browser'),
+                            ),
+                          ],
                         ],
                       ),
                     ),

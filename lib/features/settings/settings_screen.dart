@@ -43,7 +43,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final profileAsync = ref.watch(profileProvider);
 
     if (session == null) {
-      return const LoginScreen(nextPath: '/profile');
+      return const LoginScreen();
     }
 
     return profileAsync.when(
@@ -57,7 +57,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         final showDesignerFields = _designer || (profile?.hasSubmittedPatterns ?? false);
 
         return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 88),
           children: [
             Text(
               'Manage your profile and browsing preferences.',
