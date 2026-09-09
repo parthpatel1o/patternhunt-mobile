@@ -14,6 +14,8 @@ import '../../core/images/square_crop.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/category_icons.dart';
+import '../../shared/widgets/app_snack_bar.dart';
+import '../../shared/widgets/cover_square_prompt.dart';
 
 class SubmitScreen extends ConsumerStatefulWidget {
   const SubmitScreen({super.key});
@@ -32,6 +34,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
   File? _pdf;
   bool _uploading = false;
   bool _preparing = false;
+  bool _coverNotSquare = false;
   String? _error;
   bool _designerNameSynced = false;
 
@@ -79,6 +82,25 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     return out;
   }
 
+  Future<void> _syncCoverSquare({bool prompt = false}) async {
+    if (_images.isEmpty) {
+      if (!mounted) return;
+      setState(() => _coverNotSquare = false);
+      return;
+    }
+    try {
+      final square = await isNearlySquareFile(_images.first);
+      if (!mounted) return;
+      setState(() => _coverNotSquare = !square);
+      if (prompt && !square) {
+        final crop = await showCoverSquarePrompt(context);
+        if (crop && mounted) await _cropImageAt(0);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _coverNotSquare = false);
+    }
+  }
+
   Future<void> _pickImages() async {
     final max = AppConstants.instance.maxPatternImages;
     final remaining = max - _images.length;
@@ -97,6 +119,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     }
     if (picked.isEmpty || !mounted) return;
 
+    final coverIndexBefore = _images.length;
     setState(() => _preparing = true);
     try {
       final limited = picked.take(remaining).toList();
@@ -116,12 +139,16 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
       }
       if (!mounted) return;
       setState(() => _images.addAll(prepared));
+      // Prompt only when a newly added photo became the cover.
+      if (coverIndexBefore == 0 && prepared.isNotEmpty) {
+        await _syncCoverSquare(prompt: true);
+      }
     } finally {
       if (mounted) setState(() => _preparing = false);
     }
   }
 
-  void _moveImage(int from, int to) {
+  Future<void> _moveImage(int from, int to) async {
     if (from == to || from < 0 || to < 0 || from >= _images.length || to >= _images.length) {
       return;
     }
@@ -129,6 +156,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
       final item = _images.removeAt(from);
       _images.insert(to, item);
     });
+    await _syncCoverSquare();
   }
 
   void _openPhotoViewer(int initialIndex) {
@@ -151,75 +179,93 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     final file = _images[index];
     final cropped = await cropSquareImage(file);
     if (cropped == null || !mounted) return;
-    setState(() => _images[index] = cropped);
+    setState(() {
+      _images[index] = cropped;
+      if (index == 0) _coverNotSquare = false;
+    });
+  }
+
+  Future<void> _removeImageAt(int index) async {
+    final wasCover = index == 0;
+    setState(() => _images.removeAt(index));
+    if (wasCover) await _syncCoverSquare();
   }
 
   Widget _photoTile(int index) {
     final file = _images[index];
+    final coverBad = index == 0 && _coverNotSquare;
     final tile = SizedBox(
       width: _tileSize,
       height: _tileSize,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: Material(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(16),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => _openPhotoViewer(index),
-                child: Image.file(file, fit: BoxFit.contain),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: coverBad
+              ? Border.all(color: Theme.of(context).colorScheme.error, width: 2)
+              : null,
+        ),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Material(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(16),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () => _openPhotoViewer(index),
+                  child: Image.file(file, fit: BoxFit.contain),
+                ),
               ),
             ),
-          ),
-          if (index == 0)
+            if (index == 0)
+              Positioned(
+                left: 6,
+                top: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.card.withValues(alpha: 0.92),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text('Cover', style: Theme.of(context).textTheme.labelSmall),
+                ),
+              ),
             Positioned(
-              left: 6,
-              top: 6,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.card.withValues(alpha: 0.92),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text('Cover', style: Theme.of(context).textTheme.labelSmall),
-              ),
-            ),
-          Positioned(
-            left: 2,
-            bottom: 2,
-            child: Material(
-              color: AppColors.card.withValues(alpha: 0.95),
-              shape: const CircleBorder(),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: () => _cropImageAt(index),
-                child: const SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: Icon(Icons.crop, size: 16),
+              left: 2,
+              bottom: 2,
+              child: Material(
+                color: AppColors.card.withValues(alpha: 0.95),
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => _cropImageAt(index),
+                  child: const SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: Icon(Icons.crop, size: 16),
+                  ),
                 ),
               ),
             ),
-          ),
-          Positioned(
-            right: 2,
-            top: 2,
-            child: Material(
-              color: AppColors.card.withValues(alpha: 0.95),
-              shape: const CircleBorder(),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: () => setState(() => _images.removeAt(index)),
-                child: const SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: Icon(Icons.close, size: 16),
+            Positioned(
+              right: 2,
+              top: 2,
+              child: Material(
+                color: AppColors.card.withValues(alpha: 0.95),
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => _removeImageAt(index),
+                  child: const SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: Icon(Icons.close, size: 16),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
 
@@ -360,6 +406,14 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
       setState(() => _error = 'Add at least one photo');
       return;
     }
+    if (!(await isNearlySquareFile(_images.first))) {
+      if (!mounted) return;
+      setState(() {
+        _coverNotSquare = true;
+        _error = 'Your cover image needs to be a square image.';
+      });
+      return;
+    }
     if (_isFree) {
       if (_pdf == null && patternUrl.isEmpty) {
         setState(() => _error = 'Free patterns need a PDF or an external pattern URL');
@@ -431,6 +485,10 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
       ref.invalidate(profileProvider);
       if (mounted) {
         context.go('/');
+        showAppSnackBar(
+          context,
+          message: 'Your pattern has been added.',
+        );
       }
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -583,6 +641,13 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
                     _addPhotosCard(AppConstants.instance.maxPatternImages - _images.length),
                 ],
               ),
+              if (_coverNotSquare) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'Your cover image needs to be a square image.',
+                  style: textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
             ],
           ),
         ),

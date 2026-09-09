@@ -239,9 +239,9 @@ class PatternBoardRanks {
 
   factory PatternBoardRanks.fromJson(Map<String, dynamic> json) {
     return PatternBoardRanks(
-      all: json['all'] as int?,
-      week: json['week'] as int?,
-      month: json['month'] as int?,
+      all: _asInt(json['all']),
+      week: _asInt(json['week']),
+      month: _asInt(json['month']),
     );
   }
 
@@ -292,10 +292,10 @@ class DesignerPatternInsight {
       isArchived: json['isArchived'] as bool? ?? false,
       createdAt: json['createdAt'] as String? ?? '',
       imageUrl: json['imageUrl'] as String?,
-      voteCount: json['voteCount'] as int? ?? 0,
-      saveCount: json['saveCount'] as int? ?? 0,
-      viewClickCount: json['viewClickCount'] as int? ?? 0,
-      pdfDownloadCount: json['pdfDownloadCount'] as int? ?? 0,
+      voteCount: _asInt(json['voteCount']) ?? 0,
+      saveCount: _asInt(json['saveCount']) ?? 0,
+      viewClickCount: _asInt(json['viewClickCount']) ?? 0,
+      pdfDownloadCount: _asInt(json['pdfDownloadCount']) ?? 0,
       ranks: PatternBoardRanks.fromJson(
         (json['ranks'] as Map<String, dynamic>?) ?? const {},
       ),
@@ -320,14 +320,21 @@ class DesignerInsights {
 
   factory DesignerInsights.fromJson(Map<String, dynamic> json) {
     return DesignerInsights(
-      profileViewCount: json['profileViewCount'] as int? ?? 0,
-      totalUpvotes: json['totalUpvotes'] as int? ?? 0,
-      totalSaves: json['totalSaves'] as int? ?? 0,
-      totalCtaClicks: json['totalCtaClicks'] as int? ?? 0,
+      profileViewCount: _asInt(json['profileViewCount']) ?? 0,
+      totalUpvotes: _asInt(json['totalUpvotes']) ?? 0,
+      totalSaves: _asInt(json['totalSaves']) ?? 0,
+      totalCtaClicks: _asInt(json['totalCtaClicks']) ?? 0,
       patterns: (json['patterns'] as List<dynamic>? ?? [])
           .map((e) => DesignerPatternInsight.fromJson(e as Map<String, dynamic>))
           .toList(),
     );
   }
+}
+
+int? _asInt(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value.toString());
 }
 

@@ -169,15 +169,16 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
   }
 
   Future<void> _toggleVote() async {
+    if (_voting) return;
     if (ref.read(sessionProvider) == null) {
       if (mounted) context.go('/profile');
       return;
     }
-    setState(() => _voting = true);
     HapticFeedback.lightImpact();
     final previousVoted = _voted;
     final previousCount = _voteCount;
     setState(() {
+      _voting = true;
       _voted = !_voted;
       _voteCount = (_voteCount + (_voted ? 1 : -1)).clamp(0, 1 << 30);
     });
@@ -421,10 +422,12 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
                                         child: SizedBox(
                                           height: 36,
                                           child: OutlinedButton(
-                                            onPressed: _voting ? null : _toggleVote,
+                                            onPressed: _toggleVote,
                                             style: OutlinedButton.styleFrom(
                                               backgroundColor: voteBg,
                                               foregroundColor: voteFg,
+                                              disabledBackgroundColor: voteBg,
+                                              disabledForegroundColor: voteFg,
                                               side: BorderSide(color: voteBorder),
                                               padding: const EdgeInsets.symmetric(horizontal: 8),
                                               shape: const StadiumBorder(),
@@ -440,7 +443,10 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
                                                   filled: _voted,
                                                 ),
                                                 const SizedBox(width: 2),
-                                                Text('$_voteCount'),
+                                                Text(
+                                                  '$_voteCount',
+                                                  style: TextStyle(color: voteFg),
+                                                ),
                                               ],
                                             ),
                                           ),

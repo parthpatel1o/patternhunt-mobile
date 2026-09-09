@@ -38,35 +38,12 @@ class MineScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 88),
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Archive a pattern to hide it from the rank board. Delete removes it forever.',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: AppColors.muted),
-                    ),
-                  ),
-                  if (isDesigner && patterns.isNotEmpty) ...[
-                    const SizedBox(width: 12),
-                    OutlinedButton.icon(
-                      onPressed: () => context.push('/insights'),
-                      icon: const Icon(Icons.insights_outlined, size: 16),
-                      label: const Text('View insights'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.foreground,
-                        side: const BorderSide(color: AppColors.border),
-                        backgroundColor: AppColors.card,
-                        shape: const StadiumBorder(),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
-                      ),
-                    ),
-                  ],
-                ],
+              Text(
+                'Archive a pattern to hide it from the rank board. Delete removes it forever.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: AppColors.muted),
               ),
               const SizedBox(height: 24),
               if (patterns.isEmpty)

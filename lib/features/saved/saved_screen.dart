@@ -2,7 +2,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
@@ -28,35 +27,12 @@ class SavedScreen extends ConsumerWidget {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Open a folder to see the patterns you’ve saved.',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(color: AppColors.muted),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      FilledButton.icon(
-                        onPressed: () => _createBoard(context, ref),
-                        icon: const Icon(Icons.create_new_folder_outlined,
-                            size: 18),
-                        label: const Text('New folder'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: AppColors.primaryForeground,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
-                          shape: const StadiumBorder(),
-                          textStyle: const TextStyle(
-                              fontWeight: FontWeight.w600, fontSize: 13),
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    'Open a folder to see the patterns you’ve saved.',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: AppColors.muted),
                   ),
                 ),
               ),
@@ -105,106 +81,6 @@ class SavedScreen extends ConsumerWidget {
         );
       },
     );
-  }
-
-  Future<void> _createBoard(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'New folder',
-                style: Theme.of(ctx)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Name your folder, then bookmark patterns to add them here.',
-                style: Theme.of(ctx)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: AppColors.muted),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      autofocus: true,
-                      maxLength: 40,
-                      style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.foreground,
-                          ),
-                      decoration: InputDecoration(
-                        hintText: 'Folder name',
-                        hintStyle: const TextStyle(
-                          color: AppColors.muted,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 15,
-                        ),
-                        counterText: '',
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(999),
-                          borderSide: const BorderSide(color: AppColors.border),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(999),
-                          borderSide: const BorderSide(color: AppColors.border),
-                        ),
-                      ),
-                      onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: AppColors.primaryForeground,
-                      shape: const StadiumBorder(),
-                    ),
-                    child: const Text('Create'),
-                  ),
-                ],
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text('Cancel', style: TextStyle(color: AppColors.muted)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (name == null || name.isEmpty) return;
-    try {
-      await ref.read(apiClientProvider).post('/boards', data: {'name': name});
-      ref.invalidate(boardsWithPatternsProvider);
-      ref.invalidate(boardsProvider);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Created “$name”')));
-      }
-    } on ApiException catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
-      }
-    }
   }
 }
 

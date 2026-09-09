@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../features/saved/create_folder_dialog.dart';
 import '../../features/search/search_overlay.dart';
 
 class AppShell extends ConsumerWidget {
@@ -49,14 +50,13 @@ class AppShell extends ConsumerWidget {
         selectedIndex = i;
       }
     }
-    if (location.startsWith('/submit')) {
+    if (location.startsWith('/submit') || location.startsWith('/insights')) {
       selectedIndex = items.indexWhere((e) => e.route == '/mine');
       if (selectedIndex < 0) selectedIndex = items.indexWhere((e) => e.route == '/profile');
       if (selectedIndex < 0) selectedIndex = 0;
     } else if (location.startsWith('/login') ||
         location.startsWith('/reset-password') ||
-        location.startsWith('/settings') ||
-        location.startsWith('/insights')) {
+        location.startsWith('/settings')) {
       selectedIndex = items.indexWhere((e) => e.route == '/profile');
       if (selectedIndex < 0) selectedIndex = 0;
     }
@@ -69,11 +69,17 @@ class AppShell extends ConsumerWidget {
     final isHome = location == '/' || location.isEmpty;
     final showHomeActions = isHome;
     final showSubmit = showHomeActions && isDesigner && !location.startsWith('/submit');
+    final showNewFolder = isLoggedIn && location == '/saved';
+    final hasMyPatterns = isDesigner && location.startsWith('/mine')
+        ? (ref.watch(myPatternsProvider).valueOrNull?.isNotEmpty ?? false)
+        : false;
+    final showViewInsights = isDesigner && location.startsWith('/mine') && hasMyPatterns;
     final pageTitle = _titleForLocation(location);
     final useLargePageTitle = location.startsWith('/saved') ||
         location.startsWith('/mine') ||
         location.startsWith('/profile') ||
-        location.startsWith('/settings');
+        location.startsWith('/settings') ||
+        location.startsWith('/insights');
 
     return Scaffold(
       appBar: hideAppBar
@@ -137,6 +143,28 @@ class AppShell extends ConsumerWidget {
                     ),
                   const SizedBox(width: 12),
                 ],
+                if (showNewFolder) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: _HeaderPillButton(
+                      label: 'New folder',
+                      icon: Icons.create_new_folder_outlined,
+                      filled: true,
+                      onPressed: () => showCreateFolderDialog(context, ref),
+                    ),
+                  ),
+                ],
+                if (showViewInsights) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: _HeaderPillButton(
+                      label: 'View insights',
+                      icon: Icons.insights_outlined,
+                      filled: false,
+                      onPressed: () => context.push('/insights'),
+                    ),
+                  ),
+                ],
               ],
             ),
       body: child,
@@ -161,6 +189,60 @@ class AppShell extends ConsumerWidget {
     if (location.startsWith('/insights')) return 'Insights';
     if (location.startsWith('/search')) return 'Search';
     return 'Pattern Hunt';
+  }
+}
+
+class _HeaderPillButton extends StatelessWidget {
+  const _HeaderPillButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    required this.filled,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: filled ? AppColors.primary : AppColors.card,
+      shape: StadiumBorder(
+        side: filled ? BorderSide.none : const BorderSide(color: AppColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onPressed,
+        child: SizedBox(
+          height: 36,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
+                  color: filled ? AppColors.primaryForeground : AppColors.foreground,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: filled ? AppColors.primaryForeground : AppColors.foreground,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    height: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
