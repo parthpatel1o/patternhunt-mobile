@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/api/api_client.dart';
+import '../../core/config/env.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
@@ -22,6 +24,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String _category = 'all';
   bool _designer = false;
   bool _saving = false;
+  bool _deleting = false;
   bool _synced = false;
 
   @override
@@ -35,6 +38,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _designer = profile.isPatternDesigner;
     _category = profile.defaultCategorySlug ?? 'all';
     _synced = true;
+  }
+
+  Future<void> _openLegal(String path) async {
+    final uri = Uri.parse('${Env.siteUrl}$path');
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open $uri')),
+      );
+    }
   }
 
   @override
@@ -159,7 +172,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: 28),
                   FilledButton(
-                    onPressed: _saving ? null : () => _save(profile),
+                    onPressed: _saving || _deleting ? null : () => _save(profile),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: AppColors.primaryForeground,
@@ -172,13 +185,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                children: [
+                  ListTile(
+                    title: const Text('Privacy Policy'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _openLegal('/privacy'),
+                  ),
+                  const Divider(height: 1, color: AppColors.border),
+                  ListTile(
+                    title: const Text('Terms of Use'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _openLegal('/terms'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () async {
-                  await Supabase.instance.client.auth.signOut();
-                  if (context.mounted) context.go('/');
-                },
+                onPressed: _saving || _deleting
+                    ? null
+                    : () async {
+                        await Supabase.instance.client.auth.signOut();
+                        if (context.mounted) context.go('/');
+                      },
                 icon: const Icon(Icons.logout_rounded, size: 18),
                 label: const Text('Log out'),
                 style: OutlinedButton.styleFrom(
@@ -192,6 +230,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     fontSize: 14,
                   ),
                 ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: _saving || _deleting ? null : _confirmDeleteAccount,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.destructive,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                child: Text(_deleting ? 'Deleting account…' : 'Delete account'),
               ),
             ),
           ],
@@ -216,6 +270,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _confirmDeleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete account?'),
+        content: const Text(
+          'This permanently deletes your Pattern Hunt account, saved boards, votes, and any patterns you submitted. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.destructive),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    try {
+      await ref.read(apiClientProvider).delete('/me');
+      await Supabase.instance.client.auth.signOut();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Your account has been deleted')),
+        );
+        context.go('/');
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _deleting = false);
     }
   }
 }

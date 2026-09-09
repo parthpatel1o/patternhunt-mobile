@@ -39,3 +39,4 @@ flutter:
     - assets/constants.json
     - assets/design-tokens.json
     - assets/logo.png
+    - assets/app_icon.png

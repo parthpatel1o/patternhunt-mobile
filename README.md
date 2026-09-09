@@ -36,6 +36,17 @@ Update these when the web API contract or design tokens change. See `openapi.yam
 ## Store submission
 
 1. **iOS**: Archive with Xcode → Distribute App → TestFlight / App Store Connect.
-2. **Android**: `flutter build appbundle` → upload to Play Console (Internal testing track first).
+2. **Android**: create an upload keystore (once), then `flutter build appbundle` → Play Console (Internal testing first).
 3. Add `com.patternhunt://login-callback` to Supabase Auth redirect URLs (Google OAuth, email signup confirmation, and password reset).
-4. Configure signing (iOS team + Android keystore) before release builds.
+4. See `STORE_CHECKLIST.md` for the full launch checklist.
+
+### Android release signing
+
+```bash
+cd android
+keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+cp key.properties.example key.properties
+# Edit key.properties with your passwords and storeFile=upload-keystore.jks
+```
+
+`key.properties` and `*.jks` are gitignored — back them up securely.
