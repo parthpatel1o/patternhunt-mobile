@@ -40,3 +40,4 @@ flutter:
     - assets/design-tokens.json
     - assets/logo.png
     - assets/app_icon.png
+    - assets/splash_logo.png

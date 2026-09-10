@@ -110,7 +110,7 @@ class AppShell extends ConsumerWidget {
         ? Row(
             key: const ValueKey('title-home'),
             children: [
-              Image.asset('assets/logo.png', width: 26, height: 26),
+              Image.asset('assets/logo.png', width: 34, height: 34),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -306,9 +306,10 @@ class _BrandBottomNav extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelected;
 
-  /// Comfortable destination width — keeps 3 tabs from sprawling across the
-  /// full phone width while still letting 4 tabs use most of the bar.
-  static const double _maxItemWidth = 88;
+  /// Comfortable destination width — 3 tabs get a bit more room; 4 tabs stay
+  /// denser so they still fit the bar without crowding.
+  static const double _maxItemWidthThree = 112;
+  static const double _maxItemWidthFour = 88;
   static const double _barHeight = 64;
   static const double _sideInset = 8;
 
@@ -335,7 +336,9 @@ class _BrandBottomNav extends StatelessWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final available = (constraints.maxWidth - _sideInset * 2).clamp(0.0, double.infinity);
-              final rowWidth = (items.length * _maxItemWidth).clamp(0.0, available);
+              final maxItemWidth =
+                  items.length <= 3 ? _maxItemWidthThree : _maxItemWidthFour;
+              final rowWidth = (items.length * maxItemWidth).clamp(0.0, available);
 
               return Align(
                 alignment: Alignment.center,
