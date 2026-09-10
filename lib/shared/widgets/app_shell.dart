@@ -5,6 +5,7 @@ import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../features/saved/create_folder_dialog.dart';
 import '../../features/search/search_overlay.dart';
+import 'header_accent_button.dart';
 
 class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.navigationShell});
@@ -23,8 +24,9 @@ class AppShell extends ConsumerWidget {
     '/profile': 4,
     '/submit': 5,
     '/insights': 6,
-    '/login': 7,
-    '/reset-password': 8,
+    '/settings': 7,
+    '/login': 8,
+    '/reset-password': 9,
   };
 
   static bool _isImmersive(String location) {
@@ -92,13 +94,11 @@ class AppShell extends ConsumerWidget {
     final showHomeActions = isHome;
     final showSubmit = showHomeActions && isDesigner && !location.startsWith('/submit');
     final showNewFolder = isLoggedIn && location == '/saved';
-    final hasMyPatterns = isDesigner && location.startsWith('/mine')
-        ? (ref.watch(myPatternsProvider).valueOrNull?.isNotEmpty ?? false)
-        : false;
-    final showViewInsights = isDesigner && location.startsWith('/mine') && hasMyPatterns;
+    final showMineSubmit = isDesigner && location.startsWith('/mine');
     final showBackToProfile = location.startsWith('/mine') ||
         location.startsWith('/insights') ||
-        location.startsWith('/submit');
+        location.startsWith('/submit') ||
+        location.startsWith('/settings');
     final pageTitle = _titleForLocation(location);
     final useLargePageTitle = location.startsWith('/saved') ||
         location.startsWith('/mine') ||
@@ -181,7 +181,10 @@ class AppShell extends ConsumerWidget {
                   if (showSubmit)
                     Padding(
                       padding: const EdgeInsets.only(left: 8),
-                      child: _HeaderSubmitButton(
+                      child: HeaderAccentButton(
+                        label: 'Submit',
+                        icon: Icons.add_rounded,
+                        tooltip: 'Submit a pattern',
                         onPressed: () => context.go('/submit'),
                       ),
                     ),
@@ -190,22 +193,22 @@ class AppShell extends ConsumerWidget {
                 if (showNewFolder) ...[
                   Padding(
                     padding: const EdgeInsets.only(right: 12),
-                    child: _HeaderPillButton(
+                    child: HeaderAccentButton(
                       label: 'New folder',
                       icon: Icons.create_new_folder_outlined,
-                      filled: true,
+                      tooltip: 'New folder',
                       onPressed: () => showCreateFolderDialog(context, ref),
                     ),
                   ),
                 ],
-                if (showViewInsights) ...[
+                if (showMineSubmit) ...[
                   Padding(
                     padding: const EdgeInsets.only(right: 12),
-                    child: _HeaderPillButton(
-                      label: 'View insights',
-                      icon: Icons.insights_outlined,
-                      filled: false,
-                      onPressed: () => context.go('/insights'),
+                    child: HeaderAccentButton(
+                      label: 'Submit',
+                      icon: Icons.add_rounded,
+                      tooltip: 'Submit a pattern',
+                      onPressed: () => context.go('/submit'),
                     ),
                   ),
                 ],
@@ -226,112 +229,12 @@ class AppShell extends ConsumerWidget {
     if (location.startsWith('/hunt')) return 'Hunting Patterns';
     if (location.startsWith('/saved')) return 'Saved';
     if (location.startsWith('/mine')) return 'My patterns';
-    if (location.startsWith('/profile') || location.startsWith('/settings')) {
-      return 'Profile';
-    }
+    if (location.startsWith('/profile')) return 'Profile';
+    if (location.startsWith('/settings')) return 'Settings';
     if (location.startsWith('/submit')) return 'Submit a pattern';
     if (location.startsWith('/insights')) return 'Insights';
     if (location.startsWith('/search')) return 'Search';
     return 'Pattern Hunt';
-  }
-}
-
-class _HeaderPillButton extends StatelessWidget {
-  const _HeaderPillButton({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-    required this.filled,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onPressed;
-  final bool filled;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: filled ? AppColors.primary : AppColors.card,
-      shape: StadiumBorder(
-        side: filled ? BorderSide.none : const BorderSide(color: AppColors.border),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onPressed,
-        child: SizedBox(
-          height: 36,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  size: 16,
-                  color: filled ? AppColors.primaryForeground : AppColors.foreground,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: filled ? AppColors.primaryForeground : AppColors.foreground,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                    height: 1,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HeaderSubmitButton extends StatelessWidget {
-  const _HeaderSubmitButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Submit a pattern',
-      child: Material(
-        color: AppColors.card,
-        shape: const StadiumBorder(
-          side: BorderSide(color: AppColors.border),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onPressed,
-          child: const SizedBox(
-            height: 36,
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.add_rounded, size: 18, color: AppColors.accent),
-                  SizedBox(width: 4),
-                  Text(
-                    'Submit',
-                    style: TextStyle(
-                      color: AppColors.accent,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                      height: 1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 
@@ -403,6 +306,12 @@ class _BrandBottomNav extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelected;
 
+  /// Comfortable destination width — keeps 3 tabs from sprawling across the
+  /// full phone width while still letting 4 tabs use most of the bar.
+  static const double _maxItemWidth = 88;
+  static const double _barHeight = 64;
+  static const double _sideInset = 8;
+
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
@@ -422,18 +331,31 @@ class _BrandBottomNav extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.only(bottom: bottomInset),
         child: SizedBox(
-          height: 64,
-          child: Row(
-            children: [
-              for (var i = 0; i < items.length; i++)
-                Expanded(
-                  child: _BrandNavItem(
-                    item: items[i],
-                    selected: i == selectedIndex,
-                    onTap: () => onSelected(i),
+          height: _barHeight,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final available = (constraints.maxWidth - _sideInset * 2).clamp(0.0, double.infinity);
+              final rowWidth = (items.length * _maxItemWidth).clamp(0.0, available);
+
+              return Align(
+                alignment: Alignment.center,
+                child: SizedBox(
+                  width: rowWidth,
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < items.length; i++)
+                        Expanded(
+                          child: _BrandNavItem(
+                            item: items[i],
+                            selected: i == selectedIndex,
+                            onTap: () => onSelected(i),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-            ],
+              );
+            },
           ),
         ),
       ),
@@ -466,9 +388,10 @@ class _BrandNavItem extends StatelessWidget {
         hoverColor: Colors.transparent,
         overlayColor: const WidgetStatePropertyAll(Colors.transparent),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 220),
@@ -479,7 +402,7 @@ class _BrandNavItem extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: selected ? AppColors.primary.withValues(alpha: 0.85) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(18),
                 ),
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 180),
@@ -497,17 +420,17 @@ class _BrandNavItem extends StatelessWidget {
                   child: Icon(
                     selected ? item.selectedIcon : item.icon,
                     key: ValueKey(selected),
-                    size: 22,
+                    size: 26,
                     color: color,
                   ),
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 3),
               AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 220),
                 curve: Curves.easeOutCubic,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                   color: color,
                   height: 1.1,

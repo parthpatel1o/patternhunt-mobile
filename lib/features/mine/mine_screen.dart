@@ -107,199 +107,225 @@ class _MyPatternRow extends ConsumerWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Opacity(
-              opacity: pattern.isArchived ? 0.7 : 1,
-              child: Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: SizedBox(
-                      width: 56,
-                      height: 56,
-                      child: cover != null
-                          ? CachedNetworkImage(
-                              imageUrl: cover, fit: BoxFit.cover)
-                          : ColoredBox(
-                              color: AppColors.background,
-                              child: Icon(
-                                Icons.image_outlined,
-                                color: AppColors.muted.withValues(alpha: 0.5),
-                              ),
-                            ),
-                    ),
-                  ),
-                  if (extraPhotos > 0)
-                    Positioned(
-                      right: 2,
-                      bottom: 2,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: AppColors.accent.withValues(alpha: 0.9),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          '+$extraPhotos',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                          ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Opacity(
+                  opacity: pattern.isArchived ? 0.7 : 1,
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: SizedBox(
+                          width: 56,
+                          height: 56,
+                          child: cover != null
+                              ? CachedNetworkImage(
+                                  imageUrl: cover, fit: BoxFit.cover)
+                              : ColoredBox(
+                                  color: AppColors.background,
+                                  child: Icon(
+                                    Icons.image_outlined,
+                                    color: AppColors.muted.withValues(alpha: 0.5),
+                                  ),
+                                ),
                         ),
                       ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Opacity(
-                opacity: pattern.isArchived ? 0.8 : 1,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          pattern.title,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                height: 1.2,
-                              ),
-                        ),
-                        if (pattern.isArchived)
-                          Container(
+                      if (extraPhotos > 0)
+                        Positioned(
+                          right: 2,
+                          bottom: 2,
+                          child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
+                                horizontal: 6, vertical: 1),
                             decoration: BoxDecoration(
-                              color: AppColors.muted.withValues(alpha: 0.15),
+                              color: AppColors.accent.withValues(alpha: 0.9),
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
-                              'Archived',
+                              '+$extraPhotos',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Opacity(
+                    opacity: pattern.isArchived ? 0.8 : 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              pattern.title,
                               style: Theme.of(context)
                                   .textTheme
-                                  .labelSmall
+                                  .titleMedium
                                   ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 10,
-                                    color: AppColors.muted,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1.2,
                                   ),
                             ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary
-                                .withValues(alpha: pattern.isFree ? 0.2 : 0.3),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            pattern.isFree ? 'Free' : 'Paid',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: pattern.isFree
-                                  ? AppColors.accent
-                                  : AppColors.foreground,
+                            if (pattern.isArchived)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.muted.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  'Archived',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 10,
+                                        color: AppColors.muted,
+                                      ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(
+                                    alpha: pattern.isFree ? 0.2 : 0.3),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                pattern.isFree ? 'Free' : 'Paid',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: pattern.isFree
+                                      ? AppColors.accent
+                                      : AppColors.foreground,
+                                ),
+                              ),
                             ),
-                          ),
+                            if (launched != null)
+                              Text(
+                                'Launched ${DateFormat('d MMM yyyy').format(launched)}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: AppColors.muted),
+                              ),
+                          ],
                         ),
-                        if (launched != null)
-                          Text(
-                            'Launched ${DateFormat('d MMM yyyy').format(launched)}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: AppColors.muted),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      [
-                        '${pattern.voteCount} ${pattern.voteCount == 1 ? 'upvote' : 'upvotes'}',
-                        '$saveCount ${saveCount == 1 ? 'save' : 'saves'}',
-                        pattern.isFree && pattern.hasPdf
-                            ? '$ctaCount ${ctaCount == 1 ? 'download' : 'downloads'}'
-                            : '$ctaCount ${ctaCount == 1 ? 'click' : 'clicks'}',
-                        ?rankLabel,
-                      ].join(' · '),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.muted,
-                          ),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        FilledButton.icon(
-                          onPressed: () =>
-                              context.push('/mine/${pattern.id}/edit'),
-                          icon: const Icon(Icons.edit_outlined, size: 14),
-                          label: const Text('Edit'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.accent,
-                            foregroundColor: AppColors.accentForeground,
-                            shape: const StadiumBorder(),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 8),
-                            textStyle: const TextStyle(
-                                fontWeight: FontWeight.w600, fontSize: 13),
-                          ),
-                        ),
-                        OutlinedButton(
-                          onPressed: () => _archive(context, ref),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.foreground,
-                            side: const BorderSide(color: AppColors.border),
-                            backgroundColor: AppColors.card,
-                            shape: const StadiumBorder(),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 8),
-                          ),
-                          child: Text(
-                              pattern.isArchived ? 'Unarchive' : 'Archive'),
-                        ),
-                        OutlinedButton(
-                          onPressed: () => _delete(context, ref),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.destructive,
-                            side: BorderSide(
-                                color: AppColors.destructive
-                                    .withValues(alpha: 0.3)),
-                            shape: const StadiumBorder(),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 8),
-                          ),
-                          child: const Text('Delete'),
+                        const SizedBox(height: 6),
+                        Text(
+                          [
+                            '${pattern.voteCount} ${pattern.voteCount == 1 ? 'upvote' : 'upvotes'}',
+                            '$saveCount ${saveCount == 1 ? 'save' : 'saves'}',
+                            pattern.isFree && pattern.hasPdf
+                                ? '$ctaCount ${ctaCount == 1 ? 'download' : 'downloads'}'
+                                : '$ctaCount ${ctaCount == 1 ? 'click' : 'clicks'}',
+                            ?rankLabel,
+                          ].join(' · '),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.muted,
+                                  ),
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () =>
+                        context.push('/mine/${pattern.id}/edit'),
+                    icon: const Icon(Icons.edit_outlined, size: 14),
+                    label: const Text('Edit'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      foregroundColor: AppColors.accentForeground,
+                      shape: const StadiumBorder(),
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      textStyle: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => _archive(context, ref),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.foreground,
+                      side: const BorderSide(color: AppColors.border),
+                      backgroundColor: AppColors.card,
+                      shape: const StadiumBorder(),
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      textStyle: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    child: Text(
+                      pattern.isArchived ? 'Unarchive' : 'Archive',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => _delete(context, ref),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.destructive,
+                      side: BorderSide(
+                          color:
+                              AppColors.destructive.withValues(alpha: 0.3)),
+                      shape: const StadiumBorder(),
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      textStyle: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    child: const Text(
+                      'Delete',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

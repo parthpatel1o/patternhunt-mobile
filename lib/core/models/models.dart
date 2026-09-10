@@ -120,6 +120,7 @@ class UserProfile {
   final String? defaultCategorySlug;
   final String? email;
   final bool hasSubmittedPatterns;
+  final bool isFoundingMember;
 
   const UserProfile({
     required this.id,
@@ -129,6 +130,7 @@ class UserProfile {
     this.defaultCategorySlug,
     this.email,
     this.hasSubmittedPatterns = false,
+    this.isFoundingMember = false,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -140,6 +142,7 @@ class UserProfile {
       defaultCategorySlug: json['defaultCategorySlug'] as String?,
       email: json['email'] as String?,
       hasSubmittedPatterns: json['hasSubmittedPatterns'] as bool? ?? false,
+      isFoundingMember: json['isFoundingMember'] as bool? ?? false,
     );
   }
 }

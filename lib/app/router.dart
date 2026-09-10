@@ -16,6 +16,7 @@ import '../../features/profile/creator_screen.dart';
 import '../../features/saved/board_detail_screen.dart';
 import '../../features/saved/saved_screen.dart';
 import '../../features/search/search_screen.dart';
+import '../../features/settings/profile_screen.dart';
 import '../../features/settings/settings_screen.dart';
 import '../../features/submit/submit_screen.dart';
 import '../../shared/widgets/app_shell.dart';
@@ -81,7 +82,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/reset-password';
       }
       if (session == null &&
-          (['/submit', '/saved', '/mine', '/insights'].contains(state.matchedLocation) ||
+          (['/submit', '/saved', '/mine', '/insights', '/settings'].contains(state.matchedLocation) ||
               state.matchedLocation.startsWith('/mine/') ||
               state.matchedLocation.startsWith('/saved/'))) {
         return '/profile';
@@ -100,7 +101,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         final safeNext = _safeInternalPath(next);
         return safeNext ?? '/';
       }
-      if (state.matchedLocation == '/settings') return '/profile';
       return null;
     },
     routes: [
@@ -168,7 +168,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: '/profile',
                 pageBuilder: (context, state) => _fadePage(
                   key: state.pageKey,
-                  child: const SettingsScreen(),
+                  child: const ProfileScreen(),
                 ),
               ),
             ],
@@ -191,6 +191,17 @@ final routerProvider = Provider<GoRouter>((ref) {
                 pageBuilder: (context, state) => _fadePage(
                   key: state.pageKey,
                   child: const InsightsScreen(),
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/settings',
+                pageBuilder: (context, state) => _fadePage(
+                  key: state.pageKey,
+                  child: const SettingsScreen(),
                 ),
               ),
             ],

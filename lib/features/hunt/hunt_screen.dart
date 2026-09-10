@@ -17,6 +17,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/category_icons.dart';
 import '../../core/utils/slugify.dart';
 import '../../shared/widgets/arrow_big_up_icon.dart';
+import '../../shared/widgets/header_accent_button.dart';
 import '../../shared/widgets/in_app_webview.dart';
 import '../../shared/widgets/save_board_sheet.dart';
 import 'hunt_demo_pattern.dart';
@@ -528,7 +529,9 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
       child: SizedBox(
         height: _topBarHeight,
         child: Padding(
-          padding: const EdgeInsets.only(left: 16),
+          padding: EdgeInsets.symmetric(
+            horizontal: _phase == _HuntPhase.setup ? 16 : 12,
+          ),
           child: Row(
             children: [
               const Expanded(
@@ -545,25 +548,17 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
                 ),
               ),
               if (_phase == _HuntPhase.setup)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: IconButton(
-                    onPressed: _cancelFilters,
-                    tooltip: 'Close filters',
-                    icon: const Icon(Icons.close_rounded),
-                  ),
+                IconButton(
+                  onPressed: _cancelFilters,
+                  tooltip: 'Close filters',
+                  icon: const Icon(Icons.close_rounded),
                 )
               else if (_phase == _HuntPhase.hunting || _phase == _HuntPhase.end)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: TextButton.icon(
-                    onPressed: _showFilters,
-                    icon: const Icon(Icons.tune_rounded, size: 18),
-                    label: const Text('Filters'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.accent,
-                    ),
-                  ),
+                HeaderAccentButton(
+                  label: 'Filters',
+                  icon: Icons.tune_rounded,
+                  tooltip: 'Filters',
+                  onPressed: _showFilters,
                 ),
             ],
           ),

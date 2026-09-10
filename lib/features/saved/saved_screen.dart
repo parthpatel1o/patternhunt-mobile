@@ -27,7 +27,7 @@ class SavedScreen extends ConsumerWidget {
               if (groups.isEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 88),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
                     child: AppEmptyState(
                       emoji: '📁',
                       title: 'No folders yet',
@@ -43,7 +43,7 @@ class SavedScreen extends ConsumerWidget {
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 88),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
                   sliver: SliverGrid(
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(

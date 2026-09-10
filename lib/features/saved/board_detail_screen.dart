@@ -54,27 +54,27 @@ class BoardDetailScreen extends ConsumerWidget {
                   child: SafeArea(
                     bottom: false,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          OutlinedButton.icon(
+                          TextButton.icon(
                             onPressed: () => context.pop(),
-                            icon: const Icon(Icons.arrow_back, size: 16),
+                            icon: const Icon(Icons.arrow_back_rounded, size: 22),
                             label: const Text('All folders'),
-                            style: OutlinedButton.styleFrom(
+                            style: TextButton.styleFrom(
                               foregroundColor: AppColors.muted,
-                              backgroundColor: AppColors.card,
-                              side: const BorderSide(color: AppColors.border),
-                              shape: const StadiumBorder(),
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 8,
+                                horizontal: 0,
+                                vertical: 6,
                               ),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               textStyle: const TextStyle(
                                 fontWeight: FontWeight.w600,
-                                fontSize: 13,
+                                fontSize: 16,
                               ),
+                              iconSize: 22,
                             ),
                           ),
                           const SizedBox(height: 16),
