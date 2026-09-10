@@ -27,19 +27,34 @@ enum _HuntPhase { boot, setup, hunting, end }
 
 enum _HuntGesture { swipe, photoTapRight, photoTapLeft, slideUp }
 
-/// Match PatternHunt web HuntCard gesture thresholds (px / px·ms⁻¹).
+/// Match PatternHunt web HuntCard gesture thresholds (px / px·s⁻¹).
 const double _kSwipeThresholdPx = 88;
-const double _kUpvoteThresholdPx = 100;
-/// Web uses 0.55 px/ms; Flutter velocity is px/s → 550.
+/// Drag distance before an upvote commits (higher = more intentional swipe).
+const double _kUpvoteThresholdPx = 155;
+/// Hard stop while dragging — commit kicks off the halfway flight from here.
+const double _kUpvoteMaxLiftPx = 155;
 const double _kSwipeVelocityPxPerSec = 550;
-const double _kUpvoteVelocityPxPerSec = 550;
-const double _kUpvoteVelocityMinY = -36;
-const int _kFlyMs = 280;
-const int _kFlyUpMs = 360;
-const int _kSnapMs = 220;
-const int _kUpvotePopMs = 1400;
-/// After slide-up upvote feedback, auto-advance to the next card.
-const int _kUpvoteAdvanceMs = 1000;
+const double _kUpvoteVelocityPxPerSec = 650;
+/// Need meaningful lift before a flick can commit (paired with higher threshold).
+const double _kUpvoteVelocityMinY = -80;
+const int _kFlyMs = 360;
+/// First leg: ease up to ~halfway before “Upvoted!”.
+const int _kFlyToMidMs = 520;
+/// Pause with vote button celebrating on the outgoing card.
+const int _kUpvoteStampMs = 720;
+/// Second leg: ease the rest of the way off-screen.
+const int _kFlyUpMs = 460;
+const int _kSnapMs = 300;
+/// Vote-button celebrate window (stamp + exit).
+const int _kUpvotePopMs = 1100;
+
+const double _kActionBtnHeight = 48;
+
+/// Soft decelerate into the halfway pause.
+const Curve _kEaseOutSmooth = Cubic(0.16, 1.0, 0.3, 1.0);
+/// Soft accelerate off-screen after the stamp.
+const Curve _kEaseInSmooth = Cubic(0.4, 0.0, 0.15, 1.0);
+const Curve _kEaseSnap = Cubic(0.33, 1.0, 0.68, 1.0);
 
 class HuntScreen extends ConsumerStatefulWidget {
   const HuntScreen({super.key});
@@ -274,6 +289,11 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
         _peekPrevious = false;
       });
     }
+  }
+
+  void _goNextAfterUpvote() {
+    // Advance only — “Upvoted!” stays on the outgoing card’s vote button.
+    unawaited(_movePattern(1));
   }
 
   /// Match web: `dx >= 0` → previous underlay, else next; idle (`0`) defaults next.
@@ -739,13 +759,15 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
         fit: StackFit.expand,
         clipBehavior: Clip.none,
         children: [
+          // Stable ValueKey(pattern.id) so peek→front (and front→peek) reuse
+          // the same State/images instead of remounting mid-swipe.
           if (nextPattern != null)
             Positioned.fill(
               child: IgnorePointer(
                 child: Opacity(
                   opacity: showPrev ? 0 : 1,
                   child: _HuntPatternCard(
-                    key: ValueKey('peek-next-${nextPattern.id}'),
+                    key: ValueKey(nextPattern.id),
                     pattern: nextPattern,
                     period: _period,
                     interactive: false,
@@ -761,7 +783,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
                 child: Opacity(
                   opacity: showPrev ? 1 : 0,
                   child: _HuntPatternCard(
-                    key: ValueKey('peek-prev-${prevPattern.id}'),
+                    key: ValueKey(prevPattern.id),
                     pattern: prevPattern,
                     period: _period,
                     interactive: false,
@@ -778,6 +800,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
               period: _period,
               onPreviousPattern: () => _movePattern(-1),
               onNextPattern: () => _movePattern(1),
+              onUpvoteAdvance: _goNextAfterUpvote,
               onDragX: _onFrontDragX,
               onPeekSide: _onFrontPeekSide,
               onVoteChange: _updateCurrentVote,
@@ -960,6 +983,7 @@ class _HuntPatternCard extends ConsumerStatefulWidget {
     required this.period,
     required this.onPreviousPattern,
     required this.onNextPattern,
+    this.onUpvoteAdvance,
     this.onGesture,
     this.onDragX,
     this.onPeekSide,
@@ -973,6 +997,8 @@ class _HuntPatternCard extends ConsumerStatefulWidget {
   final String period;
   final VoidCallback onPreviousPattern;
   final VoidCallback onNextPattern;
+  /// Called when an upvote card should advance — confirmation stays on the outgoing card.
+  final VoidCallback? onUpvoteAdvance;
   final ValueChanged<_HuntGesture>? onGesture;
   /// Reports horizontal drag X so the parent can pick prev/next underlay from sign.
   final ValueChanged<double>? onDragX;
@@ -1008,6 +1034,8 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
   double _dragX = 0;
   double _dragY = 0;
   double _upvoteDragProgress = 0;
+  int _flyAnimMs = _kFlyToMidMs;
+  Curve _flyCurve = _kEaseOutSmooth;
   int? _axisLock; // null, 1 = x, 2 = y
   Offset? _panOrigin;
 
@@ -1091,10 +1119,39 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
   @override
   void didUpdateWidget(covariant _HuntPatternCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Parent may refresh vote/save on `_patterns` while this State is reused
+    // across peek ↔ front (shared ValueKey).
+    if (oldWidget.pattern.voted != widget.pattern.voted ||
+        oldWidget.pattern.voteCount != widget.pattern.voteCount) {
+      _voted = widget.pattern.voted;
+      _voteCount = widget.pattern.voteCount;
+    }
+    if (oldWidget.pattern.saved != widget.pattern.saved) {
+      _saved = widget.pattern.saved;
+    }
+    // Role change: drop any mid-flight transform so a demoted card doesn't
+    // sit off-screen in the peek stack, and a promoted peek starts clean.
+    if (oldWidget.interactive != widget.interactive) {
+      _resetGestureChrome();
+    }
     if (oldWidget.tutorialStep != widget.tutorialStep ||
         oldWidget.tutorialMode != widget.tutorialMode) {
       _syncIdleHintAnimations();
     }
+  }
+
+  void _resetGestureChrome() {
+    _exiting = false;
+    _flyingUp = false;
+    _dragging = false;
+    _dragX = 0;
+    _dragY = 0;
+    _upvoteDragProgress = 0;
+    _flyAnimMs = _kFlyToMidMs;
+    _flyCurve = _kEaseOutSmooth;
+    _axisLock = null;
+    _panOrigin = null;
+    _heartPop = false;
   }
 
   @override
@@ -1168,7 +1225,6 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
           _voteCount = (_voteCount + 1).clamp(0, 1 << 30);
         }
       });
-      _showUpvotePop();
       return;
     }
 
@@ -1186,10 +1242,6 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       _voteCount = (_voteCount + (_voted ? 1 : -1)).clamp(0, 1 << 30);
     });
     onVoteChange?.call(patternId, _voted, _voteCount);
-    // Burst / “Upvoted” only when adding a vote — never on un-vote.
-    if (_voted) {
-      _showUpvotePop();
-    }
     try {
       final response = await ref
           .read(apiClientProvider)
@@ -1415,53 +1467,90 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
 
   Future<void> _flyUpAndUpvote() async {
     if (_exiting) return;
+
+    // Gate auth before flying — same as web `promptLoginForVote`.
+    if (!_isDemo &&
+        !widget.tutorialMode &&
+        !_voted &&
+        ref.read(sessionProvider) == null) {
+      _snapBack();
+      if (mounted) context.go('/profile');
+      return;
+    }
+
     _exiting = true;
     _flyingUp = true;
     if (widget.tutorialMode && widget.tutorialStep == 3) {
       _slideUpHintConsumed = true;
       _stopSlideUpHint();
     }
+    // Lock next underlay before the exit (web parity).
+    widget.onPeekSide?.call(toNext: true);
+
     final height = MediaQuery.sizeOf(context).height;
-    final lift = math.max(height * 0.55, 320.0);
+    // Settle a touch past halfway so the pause reads clearly before exit.
+    final midY = -math.max(height * 0.55, 360.0);
+    final holdX = _dragX * 0.06;
     setState(() {
       _upvoteDragProgress = 1;
-      _dragX = _dragX * 0.2;
-      _dragY = -lift;
+      _dragX = holdX;
+      _dragY = midY;
+      _flyAnimMs = _kFlyToMidMs;
+      _flyCurve = _kEaseOutSmooth;
     });
-    _emitDragX();
+
+    await Future<void>.delayed(const Duration(milliseconds: _kFlyToMidMs));
+    if (!mounted) return;
+
+    // Brief settle so the card is still before “Upvoted!” shakes.
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    if (!mounted) return;
+
+    // Halfway pause: celebrate on the vote button (web VoteButton `celebrate`).
     widget.onGesture?.call(_HuntGesture.slideUp);
     unawaited(_upvoteFromSlideUp());
-    await Future<void>.delayed(const Duration(milliseconds: _kFlyUpMs - 30));
+
+    await Future<void>.delayed(const Duration(milliseconds: _kUpvoteStampMs));
     if (!mounted) return;
+
+    // Tutorial: snap back onto the demo card.
+    if (widget.tutorialMode) {
+      setState(() {
+        _dragX = 0;
+        _dragY = 0;
+        _upvoteDragProgress = 0;
+        _flyingUp = false;
+        _flyAnimMs = _kSnapMs;
+        _flyCurve = _kEaseSnap;
+      });
+      await Future<void>.delayed(const Duration(milliseconds: _kSnapMs));
+      if (!mounted) return;
+      _exiting = false;
+      return;
+    }
+
+    final lift = -math.max(height * 0.95, 560.0);
     setState(() {
-      _dragX = 0;
-      _dragY = 0;
+      _dragX = _dragX * 0.12;
+      _dragY = lift;
+      _flyAnimMs = _kFlyUpMs;
+      _flyCurve = _kEaseInSmooth;
+    });
+
+    await Future<void>.delayed(const Duration(milliseconds: _kFlyUpMs - 20));
+    if (!mounted) return;
+
+    setState(() {
       _upvoteDragProgress = 0;
       _flyingUp = false;
     });
-    _emitDragX();
-    await Future<void>.delayed(const Duration(milliseconds: _kSnapMs));
-    if (!mounted) return;
-
-    // Tutorial: stay on demo card; do not advance into the real deck.
-    if (widget.tutorialMode) {
-      _exiting = false;
-      return;
-    }
-
-    // Logged-out slide-up redirects to profile — no auto-advance.
-    if (ref.read(sessionProvider) == null) {
-      _exiting = false;
-      return;
-    }
-
-    // Let upvote feedback (“Upvoted” / burst) read, then fly to next.
-    await Future<void>.delayed(
-      const Duration(milliseconds: _kUpvoteAdvanceMs),
-    );
-    if (!mounted) return;
     _exiting = false;
-    await _flyOff(toNext: true);
+    final advance = widget.onUpvoteAdvance;
+    if (advance != null) {
+      advance();
+    } else {
+      widget.onNextPattern();
+    }
   }
 
   void _snapBack() {
@@ -1470,7 +1559,8 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       _dragY = 0;
       _upvoteDragProgress = 0;
     });
-    _emitDragX();
+    // Idle / cancel → next underlay (web `setUnderlaySide("next")`).
+    widget.onPeekSide?.call(toNext: true);
   }
 
   void _handlePhotoTap(bool right) {
@@ -1534,15 +1624,24 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     }
 
     if (_axisLock == 2) {
-      // Rubber-band downward; free travel upward toward upvote.
-      final y = dy > 0 ? dy * 0.18 : dy;
+      // Rubber-band downward; clamp upward so the card stops at the upvote line.
+      var y = dy > 0 ? dy * 0.18 : dy;
+      if (y < -_kUpvoteMaxLiftPx) y = -_kUpvoteMaxLiftPx;
       setState(() {
         _dragY = y;
+        // Keep a touch of X for feel, but never drive peek from it.
         _dragX = dx * 0.08;
         _upvoteDragProgress =
             (-y / _kUpvoteThresholdPx).clamp(0.0, 1.0);
       });
-      _emitDragX();
+      if (y < -8) {
+        widget.onPeekSide?.call(toNext: true);
+      }
+      // Hit the stop → halfway flight + “Upvoted!” (no further drag / no dip down).
+      if (y <= -_kUpvoteMaxLiftPx) {
+        setState(() => _dragging = false);
+        unawaited(_flyUpAndUpvote());
+      }
     }
   }
 
@@ -1840,29 +1939,29 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                   ),
                 ),
                 const SizedBox(height: 6),
-                if (_isDemo || !widget.interactive)
-                  Text(
-                    pattern.designerName,
-                    style: const TextStyle(
-                      color: AppColors.foreground,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                  )
-                else
-                  GestureDetector(
-                    onTap: () =>
-                        context.push(creatorPath(pattern.designerName)),
-                    child: Text(
+                Builder(
+                  builder: (context) {
+                    // Always underline (non-demo) so peek→front doesn’t jump when
+                    // the link decoration appears.
+                    final name = Text(
                       pattern.designerName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.foreground,
                         fontWeight: FontWeight.w700,
                         fontSize: 15,
-                        decoration: TextDecoration.underline,
+                        decoration: _isDemo
+                            ? TextDecoration.none
+                            : TextDecoration.underline,
                       ),
-                    ),
-                  ),
+                    );
+                    if (_isDemo || !widget.interactive) return name;
+                    return GestureDetector(
+                      onTap: () =>
+                          context.push(creatorPath(pattern.designerName)),
+                      child: name,
+                    );
+                  },
+                ),
                 const SizedBox(height: 14),
                 if (_isDemo)
                   const Text(
@@ -1889,17 +1988,20 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                             : _openSaveSheet,
                       ),
                       const SizedBox(width: 8),
-                      _VoteButton(
-                        voted: _voted,
-                        voteCount: _voteCount,
-                        busy: !widget.interactive || _voting,
-                        onPressed: _toggleVote,
+                      Expanded(
+                        child: _VoteButton(
+                          voted: _voted || _heartPop,
+                          voteCount: _voteCount,
+                          busy: !widget.interactive || _voting,
+                          celebrate: _heartPop,
+                          onPressed: _toggleVote,
+                        ),
                       ),
                       if (hasCta) ...[
                         const SizedBox(width: 8),
                         Expanded(
                           child: SizedBox(
-                            height: 44,
+                            height: _kActionBtnHeight,
                             child: FilledButton(
                               onPressed: (!widget.interactive ||
                                       _ctaLoading)
@@ -1910,16 +2012,21 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                                 foregroundColor:
                                     AppColors.accentForeground,
                                 shape: const StadiumBorder(),
+                                textStyle: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                ),
                               ),
-                              child: Text(
-                                _ctaLoading
-                                    ? 'Loading…'
-                                    : download
-                                        ? 'Download'
-                                        : 'View Pattern',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  _ctaLoading
+                                      ? 'Loading…'
+                                      : download
+                                          ? 'Download'
+                                          : 'View Pattern',
+                                  maxLines: 1,
+                                  softWrap: false,
                                 ),
                               ),
                             ),
@@ -1985,12 +2092,15 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     }
 
     final animMs = (!_dragging || _exiting)
-        ? (_flyingUp ? _kFlyUpMs : (_exiting ? _kFlyMs : _kSnapMs))
+        ? (_flyingUp ? _flyAnimMs : (_exiting ? _kFlyMs : _kSnapMs))
         : 0;
+    final curve = _flyingUp
+        ? _flyCurve
+        : (_exiting ? _kEaseInSmooth : _kEaseSnap);
 
     return AnimatedContainer(
       duration: Duration(milliseconds: animMs),
-      curve: Curves.easeOutCubic,
+      curve: curve,
       transform: Matrix4.identity()
         ..translateByDouble(_dragX, _dragY, 0, 1)
         ..rotateZ(rotation),
@@ -2017,19 +2127,12 @@ class _HuntGallery extends StatelessWidget {
   final ValueChanged<bool> onTapSide;
   final Widget? cardCoach;
 
-  static const _sparks = <(double, double, double, double)>[
-    // dx, dy, delayMs, size
-    (-42, -58, 0, 14),
-    (48, -52, 40, 12),
-    (-56, -18, 70, 10),
-    (54, -12, 90, 12),
-    (8, -78, 20, 16),
-  ];
-
   @override
   Widget build(BuildContext context) {
     final showDragCue = upvoteDragProgress > 0.08 && !heartPop;
-    final arrowSize = (2.75 + upvoteDragProgress * 2.5) * 16; // rem≈16
+    final arrowSize = (2.5 + upvoteDragProgress * 2.25) * 16;
+    final scale = 0.85 + upvoteDragProgress * 0.3;
+    final scaleY = 1 + upvoteDragProgress * 0.4;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
@@ -2087,9 +2190,14 @@ class _HuntGallery extends StatelessWidget {
                   child: Opacity(
                     opacity: 0.35 + upvoteDragProgress * 0.65,
                     child: Transform.translate(
-                      offset: Offset(0, (1 - upvoteDragProgress) * 18),
-                      child: Transform.scale(
-                        scale: 0.85 + upvoteDragProgress * 0.35,
+                      offset: Offset(0, (1 - upvoteDragProgress) * 20),
+                      child: Transform(
+                        alignment: Alignment.center,
+                        transform: Matrix4.diagonal3Values(
+                          scale,
+                          scale * scaleY,
+                          1,
+                        ),
                         child: ArrowBigUpIcon(
                           size: arrowSize,
                           color: AppColors.accent,
@@ -2101,10 +2209,6 @@ class _HuntGallery extends StatelessWidget {
                   ),
                 ),
               ),
-            if (heartPop)
-              const IgnorePointer(
-                child: _HuntUpvoteBurst(),
-              ),
           ],
         ),
       ),
@@ -2112,219 +2216,123 @@ class _HuntGallery extends StatelessWidget {
   }
 }
 
-class _HuntUpvoteBurst extends StatefulWidget {
-  const _HuntUpvoteBurst();
-
-  @override
-  State<_HuntUpvoteBurst> createState() => _HuntUpvoteBurstState();
-}
-
-class _HuntUpvoteBurstState extends State<_HuntUpvoteBurst>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: _kUpvotePopMs),
-    )..forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        final t = _controller.value;
-        // Pop badge: scale in, hold, fade (matches hunt-upvote-pop).
-        double badgeOpacity;
-        double badgeScale;
-        if (t < 0.10) {
-          final p = t / 0.10;
-          badgeOpacity = p;
-          badgeScale = 0.7 + 0.38 * p;
-        } else if (t < 0.72) {
-          badgeOpacity = 1;
-          badgeScale = 1.08 - 0.08 * ((t - 0.10) / 0.62);
-        } else {
-          badgeOpacity = 1 - ((t - 0.72) / 0.28);
-          badgeScale = 1;
-        }
-
-        // Burst icon (0–900ms of 1400ms).
-        final burstT = (t * _kUpvotePopMs / 900).clamp(0.0, 1.0);
-        double burstOpacity;
-        double burstScale;
-        double burstY;
-        if (burstT < 0.18) {
-          final p = burstT / 0.18;
-          burstOpacity = p;
-          burstScale = 0.35 + 0.85 * p;
-          burstY = -5 * p;
-        } else if (burstT < 0.55) {
-          final p = (burstT - 0.18) / 0.37;
-          burstOpacity = 1;
-          burstScale = 1.2 - 0.2 * p;
-          burstY = -5 - 15 * p;
-        } else {
-          final p = (burstT - 0.55) / 0.45;
-          burstOpacity = 1 - p;
-          burstScale = 1 - 0.15 * p;
-          burstY = -20 - 40 * p;
-        }
-
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            Center(
-              child: Transform.translate(
-                offset: Offset(0, burstY),
-                child: Opacity(
-                  opacity: burstOpacity,
-                  child: Transform.scale(
-                    scale: burstScale,
-                    child: const ArrowBigUpIcon(
-                      size: 80,
-                      color: AppColors.accent,
-                      filled: true,
-                      strokeWidth: 2,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            for (final spark in _HuntGallery._sparks)
-              _buildSpark(t, spark.$1, spark.$2, spark.$3, spark.$4),
-            Center(
-              child: Opacity(
-                opacity: badgeOpacity.clamp(0.0, 1.0),
-                child: Transform.scale(
-                  scale: badgeScale,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.accent,
-                      borderRadius: BorderRadius.circular(999),
-                      boxShadow: AppShadows.card,
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ArrowBigUpIcon(
-                          size: 20,
-                          color: Colors.white,
-                          filled: true,
-                          strokeWidth: 2.25,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'Upvoted',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildSpark(
-    double t,
-    double dx,
-    double dy,
-    double delayMs,
-    double size,
-  ) {
-    final start = delayMs / _kUpvotePopMs;
-    final end = start + 780 / _kUpvotePopMs;
-    if (t < start) return const SizedBox.shrink();
-    final local = ((t - start) / (end - start)).clamp(0.0, 1.0);
-    final opacity = local < 0.2 ? local / 0.2 : 1 - ((local - 0.2) / 0.8);
-    final scale = 0.4 + 0.3 * local;
-    return Center(
-      child: Transform.translate(
-        offset: Offset(dx * local, dy * local),
-        child: Opacity(
-          opacity: opacity.clamp(0.0, 1.0),
-          child: Transform.scale(
-            scale: scale,
-            child: ArrowBigUpIcon(
-              size: size,
-              color: AppColors.accent,
-              filled: true,
-              strokeWidth: 1.5,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _VoteButton extends StatelessWidget {
+class _VoteButton extends StatefulWidget {
   const _VoteButton({
     required this.voted,
     required this.voteCount,
     required this.busy,
     required this.onPressed,
+    this.celebrate = false,
   });
 
   final bool voted;
   final int voteCount;
   final bool busy;
+  final bool celebrate;
   final VoidCallback onPressed;
+
+  @override
+  State<_VoteButton> createState() => _VoteButtonState();
+}
+
+class _VoteButtonState extends State<_VoteButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _shake;
+  late final Animation<double> _rotate;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _shake = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    // Web `hunt-vote-celebrate` shake keyframes.
+    _rotate = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0, end: -7), weight: 12),
+      TweenSequenceItem(tween: Tween(begin: -7, end: 7), weight: 12),
+      TweenSequenceItem(tween: Tween(begin: 7, end: -5), weight: 12),
+      TweenSequenceItem(tween: Tween(begin: -5, end: 5), weight: 12),
+      TweenSequenceItem(tween: Tween(begin: 5, end: -2), weight: 12),
+      TweenSequenceItem(tween: Tween(begin: -2, end: 2), weight: 12),
+      TweenSequenceItem(tween: Tween(begin: 2, end: 0), weight: 28),
+    ]).animate(CurvedAnimation(parent: _shake, curve: Curves.linear));
+    _scale = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1, end: 1.1), weight: 12),
+      TweenSequenceItem(tween: ConstantTween(1.1), weight: 12),
+      TweenSequenceItem(tween: Tween(begin: 1.1, end: 1.06), weight: 12),
+      TweenSequenceItem(tween: ConstantTween(1.06), weight: 12),
+      TweenSequenceItem(tween: Tween(begin: 1.06, end: 1.03), weight: 12),
+      TweenSequenceItem(tween: Tween(begin: 1.03, end: 1.02), weight: 12),
+      TweenSequenceItem(tween: Tween(begin: 1.02, end: 1), weight: 28),
+    ]).animate(CurvedAnimation(parent: _shake, curve: Curves.linear));
+    if (widget.celebrate) _shake.forward(from: 0);
+  }
+
+  @override
+  void didUpdateWidget(covariant _VoteButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.celebrate && !oldWidget.celebrate) {
+      _shake.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _shake.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     // Match home pattern cards: accent fill when voted, white + accent outline otherwise.
-    final bg = voted ? AppColors.accent : Colors.white;
-    final fg = voted ? AppColors.accentForeground : AppColors.accent;
+    final active = widget.voted || widget.celebrate;
+    final bg = active ? AppColors.accent : Colors.white;
+    final fg = active ? AppColors.accentForeground : AppColors.accent;
     final border = AppColors.accent;
 
-    return SizedBox(
-      height: 44,
+    final button = SizedBox(
+      height: _kActionBtnHeight,
+      width: double.infinity,
       child: FilledButton.icon(
-        onPressed: busy ? null : onPressed,
+        onPressed: widget.busy ? null : widget.onPressed,
         style: FilledButton.styleFrom(
           backgroundColor: bg,
           foregroundColor: fg,
           disabledBackgroundColor: bg,
           disabledForegroundColor: fg,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           shape: StadiumBorder(
             side: BorderSide(color: border),
           ),
+          textStyle: const TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 14,
+          ),
         ),
         icon: ArrowBigUpIcon(
-          size: 20,
+          size: 22,
           color: fg,
-          filled: voted,
+          filled: active,
         ),
         label: Text(
-          '$voteCount',
-          style: const TextStyle(fontWeight: FontWeight.w800),
+          widget.celebrate ? 'Upvoted!' : '${widget.voteCount}',
         ),
       ),
+    );
+
+    if (!widget.celebrate) return button;
+
+    return AnimatedBuilder(
+      animation: _shake,
+      builder: (context, child) {
+        return Transform.rotate(
+          angle: _rotate.value * math.pi / 180,
+          child: Transform.scale(scale: _scale.value, child: child),
+        );
+      },
+      child: button,
     );
   }
 }
@@ -2356,8 +2364,8 @@ class _RoundActionButton extends StatelessWidget {
           onLongPress: onLongPress,
           customBorder: const StadiumBorder(),
           child: SizedBox(
-            width: 44,
-            height: 44,
+            width: _kActionBtnHeight,
+            height: _kActionBtnHeight,
             child: Icon(icon, color: AppColors.accent),
           ),
         ),
