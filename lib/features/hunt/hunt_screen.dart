@@ -151,8 +151,8 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
       if (_order == 'random') 'seed': _seed,
       if (_category != 'all') 'category': _category,
       'period': _period,
-      // Match web: omit when `all`; API ignores for logged-out users.
-      if (_show != 'all') 'show': _show,
+      // API ignores show for logged-out users.
+      'show': _show,
       'offset': offset,
       'limit': AppConstants.instance.huntPageSize,
     };
@@ -648,15 +648,6 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
                     ),
                 ],
               ),
-              if (session != null) ...[
-                const SizedBox(height: 14),
-                _ShowFilterGroup(
-                  show: _show,
-                  onToggle: (flag) => unawaited(
-                    _setShow(toggleHuntShowFilter(_show, flag)),
-                  ),
-                ),
-              ],
               const SizedBox(height: 14),
               _FilterGroup(
                 label: 'Order',
@@ -669,6 +660,16 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
                     ),
                 ],
               ),
+              if (session != null) ...[
+                const SizedBox(height: 14),
+                _ShowCheckRow(
+                  label: 'Show already voted patterns',
+                  checked: huntShowIncludesVoted(_show),
+                  onTap: () => unawaited(
+                    _setShow(toggleHuntShowVoted(_show)),
+                  ),
+                ),
+              ],
               const SizedBox(height: 18),
               SizedBox(
                 width: double.infinity,
@@ -904,10 +905,11 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
         onPrimary: _showFilters,
       );
     }
+    final count = _patterns.length;
+    final countLabel = count == 1 ? '1 pattern' : '$count patterns';
     return _MessageState(
-      title: 'You’ve seen every pattern',
-      message:
-          'Hunt again with the same filters, or change category and order.',
+      title: 'Hunt complete',
+      message: 'You’ve hunted through $countLabel in this run.',
       primaryLabel: 'Hunt again',
       onPrimary: _restart,
       secondaryLabel: 'Change filters',
@@ -950,45 +952,6 @@ class _FilterGroup extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Wrap(spacing: 6, runSpacing: 6, children: children),
-      ],
-    );
-  }
-}
-
-class _ShowFilterGroup extends StatelessWidget {
-  const _ShowFilterGroup({
-    required this.show,
-    required this.onToggle,
-  });
-
-  final String show;
-  final ValueChanged<String> onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'SHOW',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 11,
-            letterSpacing: 0.6,
-            color: AppColors.muted,
-          ),
-        ),
-        const SizedBox(height: 8),
-        for (var i = 0; i < kHuntShowChecks.length; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
-          _ShowCheckRow(
-            label: kHuntShowChecks[i].label,
-            checked: kHuntShowChecks[i].value == 'voted'
-                ? huntShowHasVoted(show)
-                : huntShowHasSaved(show),
-            onTap: () => onToggle(kHuntShowChecks[i].value),
-          ),
-        ],
       ],
     );
   }
@@ -2978,12 +2941,14 @@ class _MessageState extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleLarge
                     ?.copyWith(fontWeight: FontWeight.w800),
               ),
-              const SizedBox(height: 8),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.muted, height: 1.4),
-              ),
+              if (message.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppColors.muted, height: 1.4),
+                ),
+              ],
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,

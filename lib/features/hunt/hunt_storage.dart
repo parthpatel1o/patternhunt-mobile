@@ -38,7 +38,8 @@ class HuntStorage {
   static const _categoryKey = 'hunt.category';
   static const _orderKey = 'hunt.order';
   static const _periodKey = 'hunt.period';
-  static const _showKey = 'hunt.show';
+  /// Bumped when show-filter defaults / shape changed (voted-only checkbox).
+  static const _showKey = 'hunt.show.v5';
   static const _runSeedKey = 'hunt.run.seed';
   static const _runOrderKey = 'hunt.run.order';
   static const _runCategoryKey = 'hunt.run.category';
@@ -84,7 +85,7 @@ class HuntStorage {
     final prefs = await _preferences;
     final raw = prefs.getString(_showKey);
     final show = normalizeHuntShowFilter(raw);
-    // Persist migration so legacy values (`unvoted_saved`, old `saved`) don't stick.
+    // Persist migration so legacy saved-related values don't stick.
     if (raw != show) {
       await prefs.setString(_showKey, show);
     }
