@@ -462,7 +462,7 @@ class _SearchPanel extends StatelessWidget {
                           // Override theme InputDecorationTheme — its focusedBorder
                           // is a 2px accent outline that shows as a dark purple ring.
                           decoration: const InputDecoration(
-                            hintText: 'Search patterns or designers',
+                            hintText: 'Search Pattern Hunt',
                             hintStyle: TextStyle(
                               color: AppColors.muted,
                               fontWeight: FontWeight.w500,

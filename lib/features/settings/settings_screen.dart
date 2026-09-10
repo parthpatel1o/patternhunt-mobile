@@ -10,6 +10,7 @@ import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/category_icons.dart';
+import '../../core/utils/slugify.dart';
 import '../auth/login_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -67,48 +68,73 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _syncFromProfile(profile);
         }
 
-        final showDesignerFields = _designer || (profile?.hasSubmittedPatterns ?? false);
+        final showDesignerFields =
+            _designer || (profile?.hasSubmittedPatterns ?? false);
+        final isDesigner = profile?.isPatternDesigner ?? false;
+        final displayName = (profile?.displayName?.trim().isNotEmpty ?? false)
+            ? profile!.displayName!.trim()
+            : null;
+        final email = profile?.email;
+        final initialSource = displayName ?? email ?? '?';
+        final initial = initialSource.isEmpty
+            ? '?'
+            : initialSource.substring(0, 1).toUpperCase();
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 6, 16, 88),
           children: [
-            Text(
-              'Manage your profile and browsing preferences.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+            _ProfileIdentityCard(
+              initial: initial,
+              title: displayName ?? 'Your account',
+              email: email,
+              isDesigner: isDesigner,
+              onViewPublicProfile: displayName != null
+                  ? () => context.push(creatorPath(displayName))
+                  : null,
             ),
-            if (profile?.email != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                profile!.email!,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+            if (isDesigner) ...[
+              const SizedBox(height: 16),
+              _SectionLabel('Designer'),
+              const SizedBox(height: 8),
+              _NavCard(
+                children: [
+                  _ProfileNavTile(
+                    icon: Icons.grid_view_rounded,
+                    label: 'My patterns',
+                    subtitle: 'Edit, archive, or delete submissions',
+                    onTap: () => context.go('/mine'),
+                  ),
+                  _ProfileNavTile(
+                    icon: Icons.insights_outlined,
+                    label: 'Insights',
+                    subtitle: 'Views, upvotes, saves, and clicks',
+                    onTap: () => context.go('/insights'),
+                    showDividerAbove: true,
+                  ),
+                  _ProfileNavTile(
+                    icon: Icons.add_rounded,
+                    label: 'Submit a pattern',
+                    subtitle: 'Publish something new to the board',
+                    onTap: () => context.go('/submit'),
+                    showDividerAbove: true,
+                  ),
+                ],
               ),
             ],
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
+            _SectionLabel('Settings'),
+            const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
               decoration: BoxDecoration(
                 color: AppColors.card,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: AppColors.border),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.accent.withValues(alpha: 0.06),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
+                boxShadow: AppShadows.card,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'Profile',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 20,
-                        ),
-                  ),
-                  const SizedBox(height: 16),
                   if (profile != null && !profile.hasSubmittedPatterns) ...[
                     _DesignerToggle(
                       value: _designer,
@@ -131,34 +157,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         filled: true,
                         fillColor: AppColors.background,
                         contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 14),
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: AppColors.border),
+                          borderSide:
+                              const BorderSide(color: AppColors.border),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: AppColors.border),
+                          borderSide:
+                              const BorderSide(color: AppColors.border),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                           borderSide: const BorderSide(
-                              color: AppColors.accent, width: 1.5),
+                            color: AppColors.accent,
+                            width: 1.5,
+                          ),
                         ),
                       ),
                     ),
+                    const SizedBox(height: 20),
+                    const Divider(height: 1, color: AppColors.border),
+                    const SizedBox(height: 20),
                   ],
-                  const SizedBox(height: 28),
-                  const Divider(height: 1, color: AppColors.border),
-                  const SizedBox(height: 28),
-                  Text(
-                    'Browsing',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 20,
-                        ),
-                  ),
-                  const SizedBox(height: 16),
                   Text(
                     'Default category',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -170,12 +194,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     value: _category,
                     onChanged: (v) => setState(() => _category = v),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 20),
                   FilledButton(
-                    onPressed: _saving || _deleting ? null : () => _save(profile),
+                    onPressed:
+                        _saving || _deleting ? null : () => _save(profile),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: AppColors.primaryForeground,
+                      disabledBackgroundColor: AppColors.primary,
+                      disabledForegroundColor: AppColors.primaryForeground,
                       shape: const StadiumBorder(),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
@@ -185,27 +212,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                children: [
-                  ListTile(
-                    title: const Text('Privacy Policy'),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => _openLegal('/privacy'),
-                  ),
-                  const Divider(height: 1, color: AppColors.border),
-                  ListTile(
-                    title: const Text('Terms of Use'),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => _openLegal('/terms'),
-                  ),
-                ],
-              ),
+            _NavCard(
+              children: [
+                _ProfileNavTile(
+                  icon: Icons.privacy_tip_outlined,
+                  label: 'Privacy Policy',
+                  onTap: () => _openLegal('/privacy'),
+                ),
+                _ProfileNavTile(
+                  icon: Icons.description_outlined,
+                  label: 'Terms of Use',
+                  onTap: () => _openLegal('/terms'),
+                  showDividerAbove: true,
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -245,7 +265,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     fontSize: 14,
                   ),
                 ),
-                child: Text(_deleting ? 'Deleting account…' : 'Delete account'),
+                child:
+                    Text(_deleting ? 'Deleting account…' : 'Delete account'),
               ),
             ),
           ],
@@ -260,14 +281,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await ref.read(apiClientProvider).patch('/me/settings', {
         'defaultCategorySlug': _category,
         'displayName': _name.text.trim(),
-        'isPatternDesigner': profile?.hasSubmittedPatterns == true ? true : _designer,
+        'isPatternDesigner':
+            profile?.hasSubmittedPatterns == true ? true : _designer,
       });
       ref.invalidate(profileProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings saved')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Settings saved')),
+        );
       }
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -308,11 +335,259 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
       }
     } finally {
       if (mounted) setState(() => _deleting = false);
     }
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label.toUpperCase(),
+      style: const TextStyle(
+        fontWeight: FontWeight.w700,
+        fontSize: 11,
+        letterSpacing: 0.6,
+        color: AppColors.muted,
+      ),
+    );
+  }
+}
+
+class _ProfileIdentityCard extends StatelessWidget {
+  const _ProfileIdentityCard({
+    required this.initial,
+    required this.title,
+    required this.email,
+    required this.isDesigner,
+    this.onViewPublicProfile,
+  });
+
+  final String initial;
+  final String title;
+  final String? email;
+  final bool isDesigner;
+  final VoidCallback? onViewPublicProfile;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+        boxShadow: AppShadows.card,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.primary.withValues(alpha: 0.9),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Text(
+              initial,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: AppColors.primaryForeground,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                        height: 1.15,
+                      ),
+                ),
+                if (email != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    email!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.muted,
+                        ),
+                  ),
+                ],
+                if (isDesigner) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.85),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'Pattern designer',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primaryForeground,
+                          ),
+                        ),
+                      ),
+                      if (onViewPublicProfile != null)
+                        GestureDetector(
+                          onTap: onViewPublicProfile,
+                          child: const Text(
+                            'View public page',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.accent,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NavCard extends StatelessWidget {
+  const _NavCard({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: children),
+    );
+  }
+}
+
+class _ProfileNavTile extends StatelessWidget {
+  const _ProfileNavTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.subtitle,
+    this.showDividerAbove = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String? subtitle;
+  final VoidCallback onTap;
+  final bool showDividerAbove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (showDividerAbove)
+          const Divider(height: 1, color: AppColors.border),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                14,
+                subtitle == null ? 14 : 12,
+                10,
+                subtitle == null ? 14 : 12,
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Icon(icon, size: 20, color: AppColors.accent),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                            color: AppColors.foreground,
+                          ),
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              height: 1.25,
+                              color: AppColors.muted,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.muted,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -354,7 +629,8 @@ class _DesignerToggle extends StatelessWidget {
                 activeThumbColor: Colors.white,
                 inactiveTrackColor: AppColors.border,
                 inactiveThumbColor: Colors.white,
-                trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
+                trackOutlineColor:
+                    const WidgetStatePropertyAll(Colors.transparent),
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ],
@@ -386,7 +662,10 @@ class _CategoryDropdown extends StatelessWidget {
           value: value,
           isExpanded: true,
           isDense: true,
-          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.muted),
+          icon: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: AppColors.muted,
+          ),
           borderRadius: BorderRadius.circular(14),
           items: [
             DropdownMenuItem(
@@ -404,7 +683,11 @@ class _CategoryDropdown extends StatelessWidget {
                 value: c.slug,
                 child: Row(
                   children: [
-                    Icon(categoryIcon(c.slug), size: 18, color: AppColors.accent),
+                    Icon(
+                      categoryIcon(c.slug),
+                      size: 18,
+                      color: AppColors.accent,
+                    ),
                     const SizedBox(width: 10),
                     Text(c.name),
                   ],

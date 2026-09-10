@@ -250,13 +250,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
 
     final title = switch (_mode) {
-      _AuthMode.login => 'Welcome back',
+      _AuthMode.login => 'Welcome',
       _AuthMode.signup => 'Create account',
       _AuthMode.forgot => 'Reset password',
     };
 
     final subtitle = switch (_mode) {
-      _AuthMode.login => 'Log in to vote on patterns and save your favourites. Designers can submit patterns too.',
+      _AuthMode.login => 'Login to vote and save patterns.',
       _AuthMode.signup => 'Join Pattern Hunt to vote, save favourites, and submit patterns.',
       _AuthMode.forgot => 'Enter your email and we’ll send a reset link.',
     };

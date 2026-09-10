@@ -38,14 +38,6 @@ class MineScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 88),
             children: [
-              Text(
-                'Archive a pattern to hide it from the rank board. Delete removes it forever.',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: AppColors.muted),
-              ),
-              const SizedBox(height: 24),
               if (patterns.isEmpty)
                 AppEmptyState(
                   title: isDesigner

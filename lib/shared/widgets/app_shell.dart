@@ -52,16 +52,14 @@ class AppShell extends ConsumerWidget {
     final isLoggedIn = session != null;
     final isDesigner = isLoggedIn && (profile?.isPatternDesigner ?? false);
 
-    // Non-designer: Home | Hunt | Saved | Profile
-    // Designer:     Home | Hunt | Saved | Mine | Profile
-    // Logged out:   Home | Hunt | Profile
+    // Logged in:  Home | Hunt | Saved | Profile
+    // Logged out: Home | Hunt | Profile
+    // Designer tools (My patterns / Insights / Submit) live under Profile.
     final items = <_NavItem>[
       const _NavItem(route: '/', label: 'Home', icon: Icons.home_outlined, selectedIcon: Icons.home_rounded),
       const _NavItem(route: '/hunt', label: 'Hunt', icon: Icons.explore_outlined, selectedIcon: Icons.explore_rounded),
       if (isLoggedIn)
         const _NavItem(route: '/saved', label: 'Saved', icon: Icons.bookmark_outline, selectedIcon: Icons.bookmark_rounded),
-      if (isDesigner)
-        const _NavItem(route: '/mine', label: 'Mine', icon: Icons.grid_view_outlined, selectedIcon: Icons.grid_view_rounded),
       const _NavItem(route: '/profile', label: 'Profile', icon: Icons.person_outline, selectedIcon: Icons.person_rounded),
     ];
 
@@ -74,11 +72,11 @@ class AppShell extends ConsumerWidget {
         selectedIndex = i;
       }
     }
-    if (location.startsWith('/submit') || location.startsWith('/insights')) {
-      selectedIndex = items.indexWhere((e) => e.route == '/mine');
-      if (selectedIndex < 0) selectedIndex = items.indexWhere((e) => e.route == '/profile');
-      if (selectedIndex < 0) selectedIndex = 0;
-    } else if (location.startsWith('/login') ||
+    // Designer destinations + auth surfaces highlight Profile.
+    if (location.startsWith('/submit') ||
+        location.startsWith('/insights') ||
+        location.startsWith('/mine') ||
+        location.startsWith('/login') ||
         location.startsWith('/reset-password') ||
         location.startsWith('/settings')) {
       selectedIndex = items.indexWhere((e) => e.route == '/profile');
@@ -98,6 +96,9 @@ class AppShell extends ConsumerWidget {
         ? (ref.watch(myPatternsProvider).valueOrNull?.isNotEmpty ?? false)
         : false;
     final showViewInsights = isDesigner && location.startsWith('/mine') && hasMyPatterns;
+    final showBackToProfile = location.startsWith('/mine') ||
+        location.startsWith('/insights') ||
+        location.startsWith('/submit');
     final pageTitle = _titleForLocation(location);
     final useLargePageTitle = location.startsWith('/saved') ||
         location.startsWith('/mine') ||
@@ -143,6 +144,13 @@ class AppShell extends ConsumerWidget {
       appBar: hideAppBar
           ? null
           : AppBar(
+              leading: showBackToProfile
+                  ? IconButton(
+                      tooltip: 'Back to Profile',
+                      onPressed: () => context.go('/profile'),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    )
+                  : null,
               title: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),
                 switchInCurve: Curves.easeOutCubic,
@@ -152,7 +160,7 @@ class AppShell extends ConsumerWidget {
                 },
                 child: titleWidget,
               ),
-              titleSpacing: 16,
+              titleSpacing: showBackToProfile ? 0 : 16,
               actions: [
                 if (showHomeActions) ...[
                   _HeaderCircleButton(
@@ -290,7 +298,7 @@ class _HeaderSubmitButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Tooltip(
-      message: 'New pattern',
+      message: 'Submit a pattern',
       child: Material(
         color: AppColors.card,
         shape: const StadiumBorder(
@@ -309,7 +317,7 @@ class _HeaderSubmitButton extends StatelessWidget {
                   Icon(Icons.add_rounded, size: 18, color: AppColors.accent),
                   SizedBox(width: 4),
                   Text(
-                    'New',
+                    'Submit',
                     style: TextStyle(
                       color: AppColors.accent,
                       fontWeight: FontWeight.w700,

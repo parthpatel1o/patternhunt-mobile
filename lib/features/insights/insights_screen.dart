@@ -45,11 +45,6 @@ class InsightsScreen extends ConsumerWidget {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 88),
             children: [
-              Text(
-                'How crocheters find and engage with your patterns.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
-              ),
-              const SizedBox(height: 20),
               LayoutBuilder(
                 builder: (context, constraints) {
                   final width = constraints.maxWidth;
@@ -63,7 +58,6 @@ class InsightsScreen extends ConsumerWidget {
                         child: _StatTile(
                           label: 'Profile views',
                           value: insights.profileViewCount,
-                          hint: 'People who opened your creator page',
                           icon: Icons.visibility_outlined,
                         ),
                       ),
@@ -72,7 +66,6 @@ class InsightsScreen extends ConsumerWidget {
                         child: _StatTile(
                           label: 'Total upvotes',
                           value: insights.totalUpvotes,
-                          hint: 'Votes lifting you on the rank board',
                           icon: Icons.arrow_upward_rounded,
                         ),
                       ),
@@ -81,7 +74,6 @@ class InsightsScreen extends ConsumerWidget {
                         child: _StatTile(
                           label: 'Total saves',
                           value: insights.totalSaves,
-                          hint: 'Crocheters who bookmarked your patterns',
                           icon: Icons.bookmark_outline,
                         ),
                       ),
@@ -90,7 +82,6 @@ class InsightsScreen extends ConsumerWidget {
                         child: _StatTile(
                           label: 'Store clicks',
                           value: insights.totalCtaClicks,
-                          hint: 'Shoppers who tapped through to buy or download',
                           icon: Icons.open_in_new,
                         ),
                       ),
@@ -126,19 +117,16 @@ class _StatTile extends StatelessWidget {
   const _StatTile({
     required this.label,
     required this.value,
-    required this.hint,
     required this.icon,
   });
 
   final String label;
   final int value;
-  final String hint;
   final IconData icon;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minHeight: 132),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.card,
@@ -180,13 +168,6 @@ class _StatTile extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            hint,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted, height: 1.25),
           ),
         ],
       ),

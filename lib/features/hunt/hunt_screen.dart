@@ -25,7 +25,7 @@ import 'hunt_storage.dart';
 
 enum _HuntPhase { boot, setup, hunting, end }
 
-enum _HuntGesture { swipe, photoTapRight, photoTapLeft, slideUp }
+enum _HuntGesture { swipeLeft, swipeRight, photoTapRight, photoTapLeft, slideUp }
 
 /// Match PatternHunt web HuntCard gesture thresholds (px / px·s⁻¹).
 const double _kSwipeThresholdPx = 88;
@@ -42,11 +42,16 @@ const int _kFlyMs = 360;
 const int _kFlyToMidMs = 520;
 /// Pause with vote button celebrating on the outgoing card.
 const int _kUpvoteStampMs = 720;
+/// Tutorial: hold “Upvoted!” longer so the gesture is easy to read.
+const int _kTutorialUpvoteStampMs = 1600;
 /// Second leg: ease the rest of the way off-screen.
 const int _kFlyUpMs = 460;
 const int _kSnapMs = 300;
 /// Vote-button celebrate window (stamp + exit).
 const int _kUpvotePopMs = 1100;
+const int _kTutorialUpvotePopMs = 2000;
+/// How long to leave “Enjoy hunting patterns!” on screen.
+const int _kTutorialEnjoyMs = 2000;
 
 const double _kActionBtnHeight = 48;
 
@@ -65,7 +70,8 @@ class HuntScreen extends ConsumerStatefulWidget {
 
 class _HuntScreenState extends ConsumerState<HuntScreen> {
   final _storage = HuntStorage();
-  final PatternCard _demoPattern = createHuntDemoPattern();
+  final List<PatternCard> _demoPatterns = createHuntDemoPatterns();
+  int _demoIndex = 0;
 
   _HuntPhase _phase = _HuntPhase.boot;
   String _category = 'all';
@@ -291,6 +297,35 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     }
   }
 
+  void _moveDemoPattern(int delta) {
+    final next = _demoIndex + delta;
+    if (next < 0 || next >= _demoPatterns.length) {
+      // Upvote with nowhere to go — still reveal enjoy once the exit finishes.
+      if (delta > 0 && _tutorialStep == 5) {
+        unawaited(_revealTutorialEnjoy());
+      }
+      return;
+    }
+    setState(() {
+      _demoIndex = next;
+      _peekPrevious = false;
+    });
+    // After the upvote card leaves, reveal the enjoy sheet (not mid-flight).
+    if (delta > 0 && _tutorialStep == 5) {
+      unawaited(_revealTutorialEnjoy());
+    }
+  }
+
+  Future<void> _revealTutorialEnjoy() async {
+    if (!mounted || _tutorialFinishing || _tutorialStep != 5) return;
+    setState(() => _tutorialStep = 6);
+    await Future<void>.delayed(
+      const Duration(milliseconds: _kTutorialEnjoyMs),
+    );
+    if (!mounted || _tutorialFinishing) return;
+    await _finishTutorial();
+  }
+
   void _goNextAfterUpvote() {
     // Advance only — “Upvoted!” stays on the outgoing card’s vote button.
     unawaited(_movePattern(1));
@@ -392,12 +427,13 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     if (_tutorialSeen ||
         _tutorialFinishing ||
         _tutorialTransitioning ||
-        _tutorialStep >= 4) {
+        _tutorialStep >= 5) {
       return;
     }
 
     const expectedGestures = <_HuntGesture>[
-      _HuntGesture.swipe,
+      _HuntGesture.swipeLeft,
+      _HuntGesture.swipeRight,
       _HuntGesture.photoTapRight,
       _HuntGesture.photoTapLeft,
       _HuntGesture.slideUp,
@@ -405,21 +441,31 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     if (gesture != expectedGestures[_tutorialStep]) return;
 
     _tutorialTransitioning = true;
+    // Web: slide-up advances immediately (delay 0) so the next demo card
+    // never remounts still on step 4 and re-shows “swipe up” coaching.
     final delay = switch (_tutorialStep) {
-      0 => const Duration(milliseconds: 280),
-      1 || 2 => const Duration(milliseconds: 40),
-      _ => const Duration(milliseconds: 1450),
+      0 || 1 => const Duration(milliseconds: 280),
+      2 || 3 => const Duration(milliseconds: 40),
+      _ => Duration.zero,
     };
-    await Future<void>.delayed(delay);
+    if (delay > Duration.zero) {
+      await Future<void>.delayed(delay);
+    }
     if (!mounted || _tutorialSeen || _tutorialFinishing) return;
 
-    setState(() => _tutorialStep++);
-    if (_tutorialStep == 4) {
-      // Persist early (web writes on last gesture) so refresh mid-handoff skips tutorial.
+    setState(() {
+      _tutorialStep++;
+      // Upvote practice needs a card waiting underneath (web parity).
+      if (_tutorialStep == 4 &&
+          _demoIndex >= _demoPatterns.length - 1) {
+        _demoIndex = math.max(0, _demoPatterns.length - 2);
+        _peekPrevious = false;
+      }
+    });
+    if (_tutorialStep == 5) {
+      // Step 5 = coaching cleared while upvote plays out. Enjoy sheet waits
+      // until the card actually dismisses (`_revealTutorialEnjoy`).
       unawaited(_storage.writeTutorialSeen(true));
-      await Future<void>.delayed(const Duration(milliseconds: 2000));
-      if (!mounted || _tutorialFinishing) return;
-      await _finishTutorial();
       return;
     }
     _tutorialTransitioning = false;
@@ -571,15 +617,6 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
                       color: AppColors.foreground,
                     ),
               ),
-              const SizedBox(height: 4),
-              const Text(
-                'Tweak category, board, or order — then keep hunting.',
-                style: TextStyle(
-                  color: AppColors.muted,
-                  fontSize: 12,
-                  height: 1.35,
-                ),
-              ),
               const SizedBox(height: 16),
               _FilterGroup(
                 label: 'Category',
@@ -702,21 +739,67 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     // Coach sheet is a Stack sibling of the card (like web HuntGestureTutorial),
     // so idle swipe/slide transforms move only the card — not the sheet.
     if (!_tutorialSeen) {
+      final pattern = _demoPatterns[_demoIndex];
+      final PatternCard? prevPattern =
+          _demoIndex > 0 ? _demoPatterns[_demoIndex - 1] : null;
+      final PatternCard? nextPattern =
+          _demoIndex + 1 < _demoPatterns.length
+              ? _demoPatterns[_demoIndex + 1]
+              : null;
+      final showPrev = _peekPrevious;
+
       return Padding(
         padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
         child: Stack(
           fit: StackFit.expand,
           clipBehavior: Clip.none,
           children: [
-            _HuntPatternCard(
-              key: ValueKey(_demoPattern.id),
-              pattern: _demoPattern,
-              period: _period,
-              tutorialMode: true,
-              tutorialStep: _tutorialStep,
-              onPreviousPattern: () {},
-              onNextPattern: () {},
-              onGesture: _onTutorialGesture,
+            // Peek underlay so swipe-left reveals a different demo pattern.
+            if (nextPattern != null)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: showPrev ? 0 : 1,
+                    child: _HuntPatternCard(
+                      key: ValueKey(nextPattern.id),
+                      pattern: nextPattern,
+                      period: _period,
+                      interactive: false,
+                      onPreviousPattern: () {},
+                      onNextPattern: () {},
+                    ),
+                  ),
+                ),
+              ),
+            if (prevPattern != null)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: showPrev ? 1 : 0,
+                    child: _HuntPatternCard(
+                      key: ValueKey(prevPattern.id),
+                      pattern: prevPattern,
+                      period: _period,
+                      interactive: false,
+                      onPreviousPattern: () {},
+                      onNextPattern: () {},
+                    ),
+                  ),
+                ),
+              ),
+            Positioned.fill(
+              child: _HuntPatternCard(
+                key: ValueKey(pattern.id),
+                pattern: pattern,
+                period: _period,
+                tutorialMode: true,
+                tutorialStep: _tutorialStep,
+                onPreviousPattern: () => _moveDemoPattern(-1),
+                onNextPattern: () => _moveDemoPattern(1),
+                onGesture: _onTutorialGesture,
+                onDragX: _onFrontDragX,
+                onPeekSide: _onFrontPeekSide,
+              ),
             ),
             _TutorialCoach(
               step: _tutorialStep,
@@ -1051,7 +1134,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
 
   bool get _showSwipeHint =>
       widget.tutorialMode &&
-      widget.tutorialStep == 0 &&
+      (widget.tutorialStep == 0 || widget.tutorialStep == 1) &&
       !_dragging &&
       !_exiting &&
       !_swipeHintConsumed &&
@@ -1059,7 +1142,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
 
   bool get _showSlideUpHint =>
       widget.tutorialMode &&
-      widget.tutorialStep == 3 &&
+      widget.tutorialStep == 4 &&
       !_dragging &&
       !_exiting &&
       !_slideUpHintConsumed &&
@@ -1074,24 +1157,19 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     _voteCount = widget.pattern.voteCount;
     _swipeHintController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2200),
+      duration: const Duration(milliseconds: 1600),
     );
-    // Matches web `hunt-tut-card-swipe`: 0 → -28px/−3.5° → +28px/+3.5° → 0.
+    // Idle hint for swipe-left / swipe-right steps: 0 → ±28px → 0.
     _swipeHintX = TweenSequence<double>([
       TweenSequenceItem(
         tween: Tween<double>(begin: 0, end: -28)
             .chain(CurveTween(curve: Curves.easeInOut)),
-        weight: 30,
+        weight: 45,
       ),
       TweenSequenceItem(
-        tween: Tween<double>(begin: -28, end: 28)
+        tween: Tween<double>(begin: -28, end: 0)
             .chain(CurveTween(curve: Curves.easeInOut)),
-        weight: 35,
-      ),
-      TweenSequenceItem(
-        tween: Tween<double>(begin: 28, end: 0)
-            .chain(CurveTween(curve: Curves.easeInOut)),
-        weight: 35,
+        weight: 55,
       ),
     ]).animate(_swipeHintController);
     _slideUpHintController = AnimationController(
@@ -1136,6 +1214,10 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     }
     if (oldWidget.tutorialStep != widget.tutorialStep ||
         oldWidget.tutorialMode != widget.tutorialMode) {
+      if (oldWidget.tutorialStep != widget.tutorialStep) {
+        _swipeHintConsumed = false;
+        _slideUpHintConsumed = false;
+      }
       _syncIdleHintAnimations();
     }
   }
@@ -1178,7 +1260,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
 
   void _syncIdleHintAnimations() {
     final swipeShouldRun = widget.tutorialMode &&
-        widget.tutorialStep == 0 &&
+        (widget.tutorialStep == 0 || widget.tutorialStep == 1) &&
         !_swipeHintConsumed &&
         !_reduceMotion;
     if (swipeShouldRun) {
@@ -1190,7 +1272,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     }
 
     final slideShouldRun = widget.tutorialMode &&
-        widget.tutorialStep == 3 &&
+        widget.tutorialStep == 4 &&
         !_slideUpHintConsumed &&
         !_heartPop &&
         !_reduceMotion;
@@ -1207,7 +1289,9 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     setState(() => _heartPop = true);
     HapticFeedback.mediumImpact();
     _syncIdleHintAnimations();
-    Future<void>.delayed(const Duration(milliseconds: _kUpvotePopMs), () {
+    final popMs =
+        widget.tutorialMode ? _kTutorialUpvotePopMs : _kUpvotePopMs;
+    Future<void>.delayed(Duration(milliseconds: popMs), () {
       if (mounted) {
         setState(() => _heartPop = false);
         _syncIdleHintAnimations();
@@ -1430,11 +1514,14 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
   Future<void> _flyOff({required bool toNext}) async {
     if (_exiting) return;
     _exiting = true;
-    if (widget.tutorialMode && widget.tutorialStep == 0) {
+    if (widget.tutorialMode &&
+        (widget.tutorialStep == 0 || widget.tutorialStep == 1)) {
       _swipeHintConsumed = true;
       _stopSwipeHint();
     }
-    widget.onGesture?.call(_HuntGesture.swipe);
+    widget.onGesture?.call(
+      toNext ? _HuntGesture.swipeLeft : _HuntGesture.swipeRight,
+    );
     // Lock underlay to the destination before the exit animation (web parity).
     widget.onPeekSide?.call(toNext: toNext);
     final width = MediaQuery.sizeOf(context).width;
@@ -1448,21 +1535,13 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     await Future<void>.delayed(const Duration(milliseconds: _kFlyMs));
     if (!mounted) return;
 
-    if (widget.tutorialMode) {
-      setState(() {
-        _dragX = 0;
-        _dragY = 0;
-        _exiting = false;
-      });
-      _emitDragX();
-      return;
-    }
-
     if (toNext) {
       widget.onNextPattern();
     } else {
       widget.onPreviousPattern();
     }
+    // Tutorial: parent swaps the demo card (same as a real advance). If this
+    // State is reused as a peek, interactive flip resets transform chrome.
   }
 
   Future<void> _flyUpAndUpvote() async {
@@ -1480,9 +1559,12 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
 
     _exiting = true;
     _flyingUp = true;
-    if (widget.tutorialMode && widget.tutorialStep == 3) {
+    if (widget.tutorialMode && widget.tutorialStep == 4) {
       _slideUpHintConsumed = true;
       _stopSlideUpHint();
+      // Leave step 4 as soon as the upvote commits (web delay 0) so the next
+      // demo card never remounts still on “swipe up” coaching.
+      widget.onGesture?.call(_HuntGesture.slideUp);
     }
     // Lock next underlay before the exit (web parity).
     widget.onPeekSide?.call(toNext: true);
@@ -1507,28 +1589,19 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     if (!mounted) return;
 
     // Halfway pause: celebrate on the vote button (web VoteButton `celebrate`).
-    widget.onGesture?.call(_HuntGesture.slideUp);
+    // Tutorial already reported slide-up at commit time above.
+    if (!widget.tutorialMode) {
+      widget.onGesture?.call(_HuntGesture.slideUp);
+    }
     unawaited(_upvoteFromSlideUp());
 
-    await Future<void>.delayed(const Duration(milliseconds: _kUpvoteStampMs));
+    final stampMs =
+        widget.tutorialMode ? _kTutorialUpvoteStampMs : _kUpvoteStampMs;
+    await Future<void>.delayed(Duration(milliseconds: stampMs));
     if (!mounted) return;
 
-    // Tutorial: snap back onto the demo card.
-    if (widget.tutorialMode) {
-      setState(() {
-        _dragX = 0;
-        _dragY = 0;
-        _upvoteDragProgress = 0;
-        _flyingUp = false;
-        _flyAnimMs = _kSnapMs;
-        _flyCurve = _kEaseSnap;
-      });
-      await Future<void>.delayed(const Duration(milliseconds: _kSnapMs));
-      if (!mounted) return;
-      _exiting = false;
-      return;
-    }
-
+    // Same exit as a real hunt upvote — fly the rest of the way off-screen,
+    // then advance (tutorial uses the next demo card as underlay).
     final lift = -math.max(height * 0.95, 560.0);
     setState(() {
       _dragX = _dragX * 0.12;
@@ -1572,15 +1645,45 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
 
   void _onPanStart(DragStartDetails details) {
     if (_exiting) return;
-    _panOrigin = details.globalPosition;
-    _axisLock = null;
+
+    // If an idle hint is mid-motion, inherit its offset so touch doesn’t
+    // snap the card home (and remounting mid-pan doesn’t cancel the gesture).
+    var startX = 0.0;
+    var startY = 0.0;
+    final swipeHintLive = widget.tutorialMode &&
+        (widget.tutorialStep == 0 || widget.tutorialStep == 1) &&
+        !_swipeHintConsumed &&
+        !_reduceMotion &&
+        (_swipeHintController.isAnimating || _swipeHintController.value != 0);
+    final slideHintLive = widget.tutorialMode &&
+        widget.tutorialStep == 4 &&
+        !_slideUpHintConsumed &&
+        !_heartPop &&
+        !_reduceMotion &&
+        (_slideUpHintController.isAnimating ||
+            _slideUpHintController.value != 0);
+
+    if (swipeHintLive) {
+      final dir = widget.tutorialStep == 1 ? -1.0 : 1.0;
+      startX = _swipeHintX.value * dir;
+      _swipeHintConsumed = true;
+    } else if (slideHintLive) {
+      startY = _slideUpHintY.value;
+      _slideUpHintConsumed = true;
+    }
+
     _stopSwipeHint();
     _stopSlideUpHint();
+    // Shift origin so subsequent dx/dy continue from the hint pose.
+    _panOrigin = details.globalPosition - Offset(startX, startY);
+    _axisLock = null;
     setState(() {
       _dragging = true;
-      _dragX = 0;
-      _dragY = 0;
-      _upvoteDragProgress = 0;
+      _dragX = startX;
+      _dragY = startY;
+      _upvoteDragProgress = startY < 0
+          ? (-startY / _kUpvoteThresholdPx).clamp(0.0, 1.0)
+          : 0;
     });
     _emitDragX();
   }
@@ -1596,26 +1699,32 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       _axisLock = dx.abs() > dy.abs() * 1.05 ? 1 : 2;
       if (_axisLock == 1 &&
           widget.tutorialMode &&
-          widget.tutorialStep == 0) {
+          (widget.tutorialStep == 0 || widget.tutorialStep == 1)) {
         _swipeHintConsumed = true;
       }
       if (_axisLock == 2 &&
           widget.tutorialMode &&
-          widget.tutorialStep == 3) {
+          widget.tutorialStep == 4) {
         _slideUpHintConsumed = true;
       }
     }
 
-    // Tutorial: only the matching axis for the current practice step.
+    // Tutorial: only the matching axis / direction for the current practice step.
     if (widget.tutorialMode) {
-      if (widget.tutorialStep == 0 && _axisLock != 1) return;
-      if (widget.tutorialStep == 3 && _axisLock != 2) return;
-      if (widget.tutorialStep == 1 || widget.tutorialStep == 2) return;
+      if ((widget.tutorialStep == 0 || widget.tutorialStep == 1) &&
+          _axisLock != 1) {
+        return;
+      }
+      if (widget.tutorialStep == 4 && _axisLock != 2) return;
+      if (widget.tutorialStep == 2 || widget.tutorialStep == 3) return;
     }
 
     if (_axisLock == 1) {
+      var x = dx;
+      if (widget.tutorialMode && widget.tutorialStep == 0 && x > 0) x = 0;
+      if (widget.tutorialMode && widget.tutorialStep == 1 && x < 0) x = 0;
       setState(() {
-        _dragX = dx;
+        _dragX = x;
         _dragY = dy * 0.12;
         _upvoteDragProgress = 0;
       });
@@ -1661,7 +1770,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     _panOrigin = null;
 
     if (wasVertical) {
-      if (widget.tutorialMode && widget.tutorialStep != 3) {
+      if (widget.tutorialMode && widget.tutorialStep != 4) {
         _snapBack();
         _syncIdleHintAnimations();
         return;
@@ -1682,7 +1791,9 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     }
 
     if (wasHorizontal) {
-      if (widget.tutorialMode && widget.tutorialStep != 0) {
+      if (widget.tutorialMode &&
+          widget.tutorialStep != 0 &&
+          widget.tutorialStep != 1) {
         _snapBack();
         _syncIdleHintAnimations();
         return;
@@ -1694,6 +1805,18 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       final toNext = _dragX < 0 || (_dragX == 0 && vx < 0);
 
       if (committedByDistance || committedByVelocity) {
+        if (widget.tutorialMode) {
+          if (widget.tutorialStep == 0 && !toNext) {
+            _snapBack();
+            _syncIdleHintAnimations();
+            return;
+          }
+          if (widget.tutorialStep == 1 && toNext) {
+            _snapBack();
+            _syncIdleHintAnimations();
+            return;
+          }
+        }
         unawaited(_flyOff(toNext: toNext));
         return;
       }
@@ -1718,22 +1841,27 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
   }
 
   Widget? _buildCardCoach() {
-    if (!widget.tutorialMode) return null;
+    if (!widget.tutorialMode || widget.tutorialStep >= 5) return null;
     // Match web hideCoach: hide cue while upvote feedback / drag progress shows.
-    if (widget.tutorialStep == 3 &&
-        (_heartPop || _voted || _upvoteDragProgress > 0.15)) {
+    if (widget.tutorialStep == 4 &&
+        (_heartPop ||
+            _voted ||
+            _exiting ||
+            _flyingUp ||
+            _slideUpHintConsumed ||
+            _upvoteDragProgress > 0.15)) {
       return null;
     }
     return switch (widget.tutorialStep) {
-      1 => _HuntTutTapDotCoach(
+      2 => _HuntTutTapDotCoach(
           alignRight: true,
           reduceMotion: _reduceMotion,
         ),
-      2 => _HuntTutTapDotCoach(
+      3 => _HuntTutTapDotCoach(
           alignRight: false,
           reduceMotion: _reduceMotion,
         ),
-      3 => _HuntTutSlideUpCoach(reduceMotion: _reduceMotion),
+      4 => _HuntTutSlideUpCoach(reduceMotion: _reduceMotion),
       _ => null,
     };
   }
@@ -1766,8 +1894,6 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     final images = pattern.imageUrls;
     final download = !_isDemo && pattern.isFree && pattern.hasPdf;
     final hasCta = !_isDemo && (download || pattern.patternUrl != null);
-    // Match web HuntCard: rotate(deg) = x * 0.04
-    final rotation = _dragX * 0.04 * (math.pi / 180);
     final cardCoach = widget.interactive ? _buildCardCoach() : null;
     final rank = _isDemo ? null : pattern.allTimeRank;
     final periodLabel = AppConstants.instance.rankPeriods
@@ -1963,7 +2089,10 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                   },
                 ),
                 const SizedBox(height: 14),
-                if (_isDemo)
+                // Web: demo blurb only outside tutorial. During tutorialMode the
+                // real action row (incl. VoteButton) must show so “Upvoted!” can celebrate.
+                // Peeks use interactive:false — always show actions so underlays match.
+                if (_isDemo && !widget.tutorialMode && widget.interactive)
                   const Text(
                     'Try the gestures on this card — nothing is saved until you start hunting.',
                     style: TextStyle(
@@ -1980,10 +2109,14 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                         icon: _saved
                             ? Icons.bookmark_rounded
                             : Icons.bookmark_outline_rounded,
-                        onPressed: (!widget.interactive || _saving)
+                        onPressed: (!widget.interactive ||
+                                widget.tutorialMode ||
+                                _saving)
                             ? null
                             : _toggleSave,
-                        onLongPress: (!widget.interactive || _saving)
+                        onLongPress: (!widget.interactive ||
+                                widget.tutorialMode ||
+                                _saving)
                             ? null
                             : _openSaveSheet,
                       ),
@@ -1992,7 +2125,10 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                         child: _VoteButton(
                           voted: _voted || _heartPop,
                           voteCount: _voteCount,
-                          busy: !widget.interactive || _voting,
+                          // Tutorial: non-tappable but still paints + celebrates.
+                          busy: !widget.interactive ||
+                              _voting ||
+                              widget.tutorialMode,
                           celebrate: _heartPop,
                           onPressed: _toggleVote,
                         ),
@@ -2003,13 +2139,21 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                           child: SizedBox(
                             height: _kActionBtnHeight,
                             child: FilledButton(
+                              // Peek cards keep onPressed null (IgnorePointer
+                              // also blocks taps) but must look enabled so
+                              // peek→front doesn’t flash a gray CTA.
                               onPressed: (!widget.interactive ||
+                                      widget.tutorialMode ||
                                       _ctaLoading)
                                   ? null
                                   : _onCta,
                               style: FilledButton.styleFrom(
                                 backgroundColor: AppColors.accent,
                                 foregroundColor:
+                                    AppColors.accentForeground,
+                                disabledBackgroundColor:
+                                    AppColors.accent,
+                                disabledForegroundColor:
                                     AppColors.accentForeground,
                                 shape: const StadiumBorder(),
                                 textStyle: const TextStyle(
@@ -2027,6 +2171,33 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                                           : 'View Pattern',
                                   maxLines: 1,
                                   softWrap: false,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ] else if (_isDemo || widget.tutorialMode) ...[
+                        // Web `HUNT_CARD_CTA_PLACEHOLDER` — keeps actions aligned.
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SizedBox(
+                            height: _kActionBtnHeight,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  'No store link',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: AppColors.muted,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                  ),
                                 ),
                               ),
                             ),
@@ -2058,53 +2229,44 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       return card;
     }
 
-    if (_showSwipeHint) {
-      return AnimatedBuilder(
-        animation: _swipeHintX,
-        builder: (context, child) {
-          final x = _swipeHintX.value;
-          final rot = (x / 28) * (3.5 * math.pi / 180);
-          return Transform(
-            alignment: Alignment.center,
-            transform: Matrix4.identity()
-              ..translateByDouble(x, 0, 0, 1)
-              ..rotateZ(rot),
-            child: child,
-          );
-        },
-        child: card,
-      );
-    }
+    // One transform tree for idle hints + live drag so starting a swipe
+    // never remounts the GestureDetector (which cancelled the first pan).
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        _swipeHintController,
+        _slideUpHintController,
+      ]),
+      builder: (context, child) {
+        var x = _dragX;
+        var y = _dragY;
+        if (!_dragging && !_exiting) {
+          if (_showSwipeHint) {
+            final dir = widget.tutorialStep == 1 ? -1.0 : 1.0;
+            x = _swipeHintX.value * dir;
+            y = 0;
+          } else if (_showSlideUpHint) {
+            x = 0;
+            y = _slideUpHintY.value;
+          }
+        }
+        final rot = x * 0.04 * (math.pi / 180);
+        final animMs = (!_dragging || _exiting)
+            ? (_flyingUp ? _flyAnimMs : (_exiting ? _kFlyMs : _kSnapMs))
+            : 0;
+        final curve = _flyingUp
+            ? _flyCurve
+            : (_exiting ? _kEaseInSmooth : _kEaseSnap);
 
-    if (_showSlideUpHint) {
-      return AnimatedBuilder(
-        animation: _slideUpHintY,
-        builder: (context, child) {
-          return Transform(
-            alignment: Alignment.center,
-            transform: Matrix4.identity()
-              ..translateByDouble(0, _slideUpHintY.value, 0, 1),
-            child: child,
-          );
-        },
-        child: card,
-      );
-    }
-
-    final animMs = (!_dragging || _exiting)
-        ? (_flyingUp ? _flyAnimMs : (_exiting ? _kFlyMs : _kSnapMs))
-        : 0;
-    final curve = _flyingUp
-        ? _flyCurve
-        : (_exiting ? _kEaseInSmooth : _kEaseSnap);
-
-    return AnimatedContainer(
-      duration: Duration(milliseconds: animMs),
-      curve: curve,
-      transform: Matrix4.identity()
-        ..translateByDouble(_dragX, _dragY, 0, 1)
-        ..rotateZ(rotation),
-      transformAlignment: Alignment.center,
+        return AnimatedContainer(
+          duration: Duration(milliseconds: animMs),
+          curve: curve,
+          transform: Matrix4.identity()
+            ..translateByDouble(x, y, 0, 1)
+            ..rotateZ(rot),
+          transformAlignment: Alignment.center,
+          child: child,
+        );
+      },
       child: card,
     );
   }
@@ -2590,7 +2752,7 @@ class _HuntTutSlideUpCoachState extends State<_HuntTutSlideUpCoach>
                       ],
                     ),
                     child: const Text(
-                      'SLIDE UP',
+                      'SWIPE UP',
                       style: TextStyle(
                         color: AppColors.accent,
                         fontSize: 11,
@@ -2611,9 +2773,14 @@ class _HuntTutSlideUpCoachState extends State<_HuntTutSlideUpCoach>
 
 const _tutorialMessages = <(String, String, String)>[
   (
-    'Swipe to browse',
-    'Swipe the card left for the next pattern, or right for the previous.',
-    'Swipe the card to continue',
+    'Swipe left',
+    'Swipe the card left to view the next pattern',
+    'Swipe left to continue',
+  ),
+  (
+    'Swipe right',
+    'Swipe the card right to view the previous pattern',
+    'Swipe right to continue',
   ),
   (
     'Next photo',
@@ -2622,16 +2789,16 @@ const _tutorialMessages = <(String, String, String)>[
   ),
   (
     'Previous photo',
-    'Tap the left side of the image to go back.',
+    'Tap the left side of the image to see the previous photo.',
     'Tap the left side to continue',
   ),
   (
-    'Slide up to upvote',
-    'Slide this card upward to upvote the pattern.',
-    'Slide the card up to finish',
+    'Swipe up to upvote',
+    'Swipe this card up to upvote the pattern',
+    'Swipe the card up to finish',
   ),
   (
-    'Enjoy hunting patterns',
+    'Enjoy hunting patterns!',
     '',
     '',
   ),
@@ -2645,44 +2812,12 @@ class _TutorialCoach extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final item = _tutorialMessages[step];
-    final isPracticeStep = step < 4;
+    // Step 5: upvote playing out / card exiting — no sheet yet.
+    if (step == 5) return const SizedBox.shrink();
+    // Step 6+: card is gone — now show the enjoy handoff.
+    if (step >= 6) return const _TutorialEnjoyHandoff();
 
-    if (!isPracticeStep) {
-      return Positioned(
-        left: 12,
-        right: 12,
-        bottom: 12,
-        child: Material(
-          color: AppColors.accent,
-          borderRadius: BorderRadius.circular(22),
-          elevation: 12,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.favorite_rounded,
-                  size: 40,
-                  color: AppColors.primary,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  item.$1,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
+    final item = _tutorialMessages[step];
 
     // Sibling of the card Stack in `_buildHunting` (web HuntGestureTutorial);
     // not parented under card transforms, so idle swipe/slide won't move it.
@@ -2703,7 +2838,7 @@ class _TutorialCoach extends StatelessWidget {
               Row(
                 children: [
                   Text(
-                    '${step + 1} of 4',
+                    '${step + 1} of 5',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.7),
                       fontSize: 11,
@@ -2711,6 +2846,23 @@ class _TutorialCoach extends StatelessWidget {
                       letterSpacing: 0.6,
                     ),
                   ),
+                  const SizedBox(width: 10),
+                  for (var i = 0; i < 5; i++) ...[
+                    if (i > 0) const SizedBox(width: 4),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: 16,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: i == step
+                            ? Colors.white
+                            : Colors.white.withValues(
+                                alpha: i < step ? 0.55 : 0.25,
+                              ),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                  ],
                   const Spacer(),
                   TextButton(
                     onPressed: () => unawaited(onSkip()),
@@ -2749,6 +2901,37 @@ class _TutorialCoach extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown only after the upvote card has left the deck.
+class _TutorialEnjoyHandoff extends StatelessWidget {
+  const _TutorialEnjoyHandoff();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: 12,
+      right: 12,
+      bottom: 12,
+      child: Material(
+        color: AppColors.accent,
+        borderRadius: BorderRadius.circular(22),
+        elevation: 12,
+        child: const Padding(
+          padding: EdgeInsets.fromLTRB(24, 32, 24, 32),
+          child: Text(
+            'Enjoy hunting patterns!',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
       ),

@@ -24,22 +24,10 @@ class SavedScreen extends ConsumerWidget {
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-                  child: Text(
-                    'Open a folder to see the patterns you’ve saved.',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(color: AppColors.muted),
-                  ),
-                ),
-              ),
               if (groups.isEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 88),
+                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 88),
                     child: AppEmptyState(
                       emoji: '📁',
                       title: 'No folders yet',
@@ -55,7 +43,7 @@ class SavedScreen extends ConsumerWidget {
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 88),
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 88),
                   sliver: SliverGrid(
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
