@@ -110,8 +110,7 @@ class AppShell extends ConsumerWidget {
         ? Row(
             key: const ValueKey('title-home'),
             children: [
-              Image.asset('assets/logo.png', width: 34, height: 34),
-              const SizedBox(width: 6),
+              Image.asset('assets/logo.png', width: 38, height: 38),
               Expanded(
                 child: Text(
                   'Pattern Hunt',
