@@ -91,6 +91,7 @@ class PatternsNotifier extends FamilyAsyncNotifier<PatternsPage, PatternQuery> {
           patterns: [...current.patterns, ...appended],
           hasMore: next.hasMore,
           nextOffset: next.nextOffset,
+          rankOffset: current.rankOffset,
         ),
       );
     } catch (_) {

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -27,18 +28,22 @@ class PatternCardWidget extends ConsumerStatefulWidget {
     required this.rank,
     this.rankPeriod = 'all',
     this.showRank = true,
+    this.highlight = false,
   });
 
   final PatternCard pattern;
   final int rank;
   final String rankPeriod;
   final bool showRank;
+  /// Brief outline + shake after publish. Fades out on its own.
+  final bool highlight;
 
   @override
   ConsumerState<PatternCardWidget> createState() => _PatternCardWidgetState();
 }
 
-class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
+class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
+    with TickerProviderStateMixin {
   bool _voting = false;
   bool _saving = false;
   bool _ctaLoading = false;
@@ -47,17 +52,22 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
   late int _voteCount;
   int _imageIndex = 0;
   late final PageController _imageController;
+  AnimationController? _highlightFade;
+  AnimationController? _highlightShake;
 
   @override
   void initState() {
     super.initState();
     _imageController = PageController();
     _syncFromPattern();
+    if (widget.highlight) _startHighlight();
   }
 
   @override
   void dispose() {
     _imageController.dispose();
+    _highlightFade?.dispose();
+    _highlightShake?.dispose();
     super.dispose();
   }
 
@@ -76,6 +86,22 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
         _imageController.jumpToPage(0);
       }
     }
+    if (widget.highlight && !oldWidget.highlight) {
+      _startHighlight();
+    }
+  }
+
+  void _startHighlight() {
+    _highlightFade?.dispose();
+    _highlightShake?.dispose();
+    _highlightFade = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..forward();
+    _highlightShake = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    )..forward();
   }
 
   void _syncFromPattern() {
@@ -303,7 +329,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
     final images = pattern.imageUrls;
     final radius = BorderRadius.circular(16);
 
-    return Padding(
+    final card = Padding(
       padding: EdgeInsets.only(top: widget.showRank ? 8 : 0),
       child: Stack(
         clipBehavior: Clip.none,
@@ -530,6 +556,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
         ],
       ),
     ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.04, end: 0);
+    return _withHighlight(card);
   }
 
   Widget _buildGallery(List<String> images, Color bg) {
@@ -603,6 +630,42 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget> {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _withHighlight(Widget card) {
+    final fade = _highlightFade;
+    final shake = _highlightShake;
+    if (!widget.highlight || fade == null || shake == null) return card;
+    return AnimatedBuilder(
+      animation: Listenable.merge([fade, shake]),
+      child: card,
+      builder: (context, child) {
+        final strength = 1 - Curves.easeOut.transform(fade.value);
+        if (strength < 0.02) return child!;
+        final shakeT = shake.value.clamp(0.0, 1.0);
+        final dx = math.sin(shakeT * math.pi * 5) * 6 * (1 - shakeT);
+        return Transform.translate(
+          offset: Offset(dx, 0),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: AppColors.accent.withValues(alpha: 0.9 * strength),
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.accent.withValues(alpha: 0.28 * strength),
+                  blurRadius: 18,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: child,
+          ),
+        );
+      },
     );
   }
 }

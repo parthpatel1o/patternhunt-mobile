@@ -452,14 +452,22 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
       if (needsDesignerName) {
         payload['designerName'] = designerName;
       }
-      await api.post('/patterns', data: payload);
+      final created = await api.post('/patterns', data: payload);
+      final patternId = created['patternId'] as String? ?? payload['patternId'] as String?;
 
       ref.invalidate(myPatternsProvider);
       ref.invalidate(patternsProvider);
       ref.invalidate(profileProvider);
       if (mounted) {
-        // Force the submitted category so preferred-category doesn't hide it.
-        context.go('/?category=$_category');
+        // Land on the past 7 days board and highlight the new pattern in place.
+        context.go(Uri(
+          path: '/',
+          queryParameters: {
+            'category': _category,
+            'period': 'week',
+            if (patternId != null && patternId.isNotEmpty) 'pattern': patternId,
+          },
+        ).toString());
         showAppSnackBar(
           context,
           message: 'Your pattern has been added.',

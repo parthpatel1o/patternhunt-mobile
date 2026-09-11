@@ -79,12 +79,15 @@ class PatternsPage {
   final bool hasMore;
   final int? nextOffset;
   final bool loadingMore;
+  /// Index of the first pattern on this page (0 for the top of the board).
+  final int rankOffset;
 
   const PatternsPage({
     required this.patterns,
     required this.hasMore,
     required this.nextOffset,
     this.loadingMore = false,
+    this.rankOffset = 0,
   });
 
   factory PatternsPage.fromJson(Map<String, dynamic> json) {
@@ -94,6 +97,7 @@ class PatternsPage {
           .toList(),
       hasMore: json['hasMore'] as bool? ?? false,
       nextOffset: json['nextOffset'] as int?,
+      rankOffset: json['rankOffset'] as int? ?? 0,
     );
   }
 
@@ -102,12 +106,14 @@ class PatternsPage {
     bool? hasMore,
     int? nextOffset,
     bool? loadingMore,
+    int? rankOffset,
   }) {
     return PatternsPage(
       patterns: patterns ?? this.patterns,
       hasMore: hasMore ?? this.hasMore,
       nextOffset: nextOffset ?? this.nextOffset,
       loadingMore: loadingMore ?? this.loadingMore,
+      rankOffset: rankOffset ?? this.rankOffset,
     );
   }
 }
