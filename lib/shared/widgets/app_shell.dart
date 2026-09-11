@@ -99,7 +99,12 @@ class AppShell extends ConsumerWidget {
         location.startsWith('/insights') ||
         location.startsWith('/submit') ||
         location.startsWith('/settings');
-    final pageTitle = _titleForLocation(location);
+    final pageTitle = _titleForLocation(
+      location,
+      myPatternCount: location.startsWith('/mine')
+          ? ref.watch(myPatternsProvider).valueOrNull?.length
+          : null,
+    );
     final useLargePageTitle = location.startsWith('/saved') ||
         location.startsWith('/mine') ||
         location.startsWith('/profile') ||
@@ -224,10 +229,13 @@ class AppShell extends ConsumerWidget {
     );
   }
 
-  static String _titleForLocation(String location) {
+  static String _titleForLocation(String location, {int? myPatternCount}) {
     if (location.startsWith('/hunt')) return 'Hunting Patterns';
     if (location.startsWith('/saved')) return 'Saved';
-    if (location.startsWith('/mine')) return 'My patterns';
+    if (location.startsWith('/mine')) {
+      if (myPatternCount == null) return 'My patterns';
+      return 'My patterns ($myPatternCount)';
+    }
     if (location.startsWith('/profile')) return 'Profile';
     if (location.startsWith('/settings')) return 'Settings';
     if (location.startsWith('/submit')) return 'Submit a pattern';

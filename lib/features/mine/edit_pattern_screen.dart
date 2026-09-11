@@ -14,7 +14,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/images/square_crop.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
-import '../../shared/widgets/cover_square_prompt.dart';
+import '../../shared/widgets/reorderable_photo_grid.dart';
 
 sealed class _EditPhoto {
   _EditPhoto({required this.id});
@@ -72,7 +72,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
     super.dispose();
   }
 
-  Future<void> _syncCoverSquare({bool prompt = false}) async {
+  Future<void> _syncCoverSquare() async {
     if (_photos.isEmpty) {
       if (!mounted) return;
       setState(() => _coverNotSquare = false);
@@ -86,10 +86,6 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
       };
       if (!mounted) return;
       setState(() => _coverNotSquare = !square);
-      if (prompt && !square) {
-        final crop = await showCoverSquarePrompt(context);
-        if (crop && mounted) await _cropAt(0);
-      }
     } catch (_) {
       if (mounted) setState(() => _coverNotSquare = false);
     }
@@ -123,7 +119,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
           );
         _loading = false;
       });
-      await _syncCoverSquare(prompt: true);
+      await _syncCoverSquare();
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -189,22 +185,25 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
       if (!mounted) return;
       setState(() => _photos.addAll(prepared));
       if (coverIndexBefore == 0 && prepared.isNotEmpty) {
-        await _syncCoverSquare(prompt: true);
+        await _syncCoverSquare();
       }
     } finally {
       if (mounted) setState(() => _preparing = false);
     }
   }
 
-  Future<void> _movePhoto(int from, int to) async {
+  void _movePhoto(int from, int to) {
     if (from == to || from < 0 || to < 0 || from >= _photos.length || to >= _photos.length) {
       return;
     }
+    final coverChanged = from == 0 || to == 0;
     setState(() {
       final item = _photos.removeAt(from);
       _photos.insert(to, item);
     });
-    await _syncCoverSquare();
+    if (coverChanged) {
+      _syncCoverSquare();
+    }
   }
 
   Future<File> _fileForCrop(_EditPhoto photo) async {
@@ -256,7 +255,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
   Widget _photoTile(int index) {
     final photo = _photos[index];
     final coverBad = index == 0 && _coverNotSquare;
-    final tile = SizedBox(
+    return SizedBox(
       width: _tileSize,
       height: _tileSize,
       child: DecoratedBox(
@@ -328,40 +327,14 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
         ),
       ),
     );
+  }
 
-    return LongPressDraggable<int>(
-      data: index,
-      maxSimultaneousDrags: _saving || _preparing ? 0 : 1,
-      feedback: Material(
-        elevation: 6,
-        borderRadius: BorderRadius.circular(16),
-        child: SizedBox(
-          width: _tileSize,
-          height: _tileSize,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: ColoredBox(
-              color: AppColors.background,
-              child: _photoPreview(photo),
-            ),
-          ),
-        ),
-      ),
-      childWhenDragging: Opacity(opacity: 0.35, child: tile),
-      child: DragTarget<int>(
-        onWillAcceptWithDetails: (details) => details.data != index,
-        onAcceptWithDetails: (details) => _movePhoto(details.data, index),
-        builder: (context, candidate, rejected) {
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: candidate.isNotEmpty
-                  ? Border.all(color: AppColors.accent, width: 2)
-                  : null,
-            ),
-            child: tile,
-          );
-        },
+  Widget _photoFeedback(int index) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: ColoredBox(
+        color: AppColors.background,
+        child: _photoPreview(_photos[index]),
       ),
     );
   }
@@ -595,17 +568,18 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
           const SizedBox(height: 16),
           _EditSection(
             title: 'Photos',
-            hint: 'Add, remove, or hold and drag to reorder. The cover photo must be square.',
+            hint: 'Add, remove, or drag the handle to reorder. Drop between photos to insert. The cover photo must be square.',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    for (var i = 0; i < _photos.length; i++) _photoTile(i),
-                    if (remaining > 0) _addPhotosCard(remaining),
-                  ],
+                ReorderablePhotoGrid(
+                  itemCount: _photos.length,
+                  tileSize: _tileSize,
+                  enabled: !_saving && !_preparing,
+                  tileBuilder: (context, index) => _photoTile(index),
+                  feedbackBuilder: (context, index) => _photoFeedback(index),
+                  onReorder: _movePhoto,
+                  trailing: remaining > 0 ? _addPhotosCard(remaining) : null,
                 ),
                 if (_coverNotSquare) ...[
                   const SizedBox(height: 10),

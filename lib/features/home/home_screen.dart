@@ -10,10 +10,17 @@ import '../../shared/widgets/pattern_card_widget.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({super.key, this.initialQuery, this.focusPatternId});
+  const HomeScreen({
+    super.key,
+    this.initialQuery,
+    this.focusPatternId,
+    this.initialCategory,
+  });
 
   final String? initialQuery;
   final String? focusPatternId;
+  /// When set (e.g. after submit), force this category on the rank board.
+  final String? initialCategory;
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
@@ -46,6 +53,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
     searchQuery = widget.initialQuery?.trim().isEmpty == true ? null : widget.initialQuery?.trim();
+    final forced = widget.initialCategory?.trim();
+    if (forced != null && forced.isNotEmpty) {
+      category = forced == 'all' ? null : forced;
+      _categoryInitialized = true;
+    }
     _scrollController.addListener(_onScroll);
   }
 
@@ -56,6 +68,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final next = widget.initialQuery?.trim();
       searchQuery = (next == null || next.isEmpty) ? null : next;
       if (searchQuery != null) category = null;
+    }
+    if (widget.initialCategory != oldWidget.initialCategory) {
+      final forced = widget.initialCategory?.trim();
+      if (forced != null && forced.isNotEmpty) {
+        setState(() {
+          category = forced == 'all' ? null : forced;
+          searchQuery = null;
+          _categoryInitialized = true;
+        });
+      }
     }
   }
 

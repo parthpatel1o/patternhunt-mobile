@@ -117,12 +117,16 @@ final routerProvider = Provider<GoRouter>((ref) {
                 pageBuilder: (context, state) {
                   final q = state.uri.queryParameters['q'];
                   final patternId = state.uri.queryParameters['pattern'];
+                  final category = state.uri.queryParameters['category'];
                   return _fadePage(
                     key: state.pageKey,
                     child: HomeScreen(
-                      key: ValueKey('home-${q ?? ''}-${patternId ?? ''}'),
+                      key: ValueKey(
+                        'home-${q ?? ''}-${patternId ?? ''}-${category ?? ''}',
+                      ),
                       initialQuery: q,
                       focusPatternId: patternId,
+                      initialCategory: category,
                     ),
                   );
                 },
