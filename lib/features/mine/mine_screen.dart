@@ -41,6 +41,17 @@ class MineScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 88),
             children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12, top: 2),
+                child: Text(
+                  patterns.length == 1
+                      ? '1 pattern'
+                      : '${patterns.length} patterns',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.muted,
+                      ),
+                ),
+              ),
               if (patterns.isEmpty)
                 AppEmptyState(
                   title: isDesigner

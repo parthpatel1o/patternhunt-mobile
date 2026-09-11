@@ -568,7 +568,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
           const SizedBox(height: 16),
           _EditSection(
             title: 'Photos',
-            hint: 'Add, remove, or drag the handle to reorder. Drop between photos to insert. The cover photo must be square.',
+            hint: 'Choose one or more photos.',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

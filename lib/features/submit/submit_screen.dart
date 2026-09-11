@@ -603,7 +603,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Choose one or more photos. Drag the handle to reorder — the cover photo must be square.',
+                'Choose one or more photos.',
                 style: textTheme.bodySmall?.copyWith(color: AppColors.muted),
               ),
               const SizedBox(height: 12),
