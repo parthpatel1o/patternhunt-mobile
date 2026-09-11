@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
@@ -8,6 +11,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/category_icons.dart';
 import '../../shared/widgets/home_empty_state.dart';
 import '../../shared/widgets/pattern_card_widget.dart';
+import '../../shared/widgets/submit_invite_card.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -43,6 +47,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _showFocusEffect = false;
   bool _revealedFocus = false;
   int _revealAttempts = 0;
+  double? _lastScrollExtent;
 
   bool get _isSearching => searchQuery != null && searchQuery!.isNotEmpty;
 
@@ -251,25 +256,137 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _revealFocusedPattern() async {
     if (!mounted || _revealedFocus || _focusId == null) return;
     final target = _focusKey.currentContext;
-    if (target == null) {
+    if (target == null || !_isFocusLaidOut(target) || !_scrollExtentSettled(target)) {
       _revealAttempts += 1;
-      if (_revealAttempts > 8) return;
+      if (_revealAttempts > 24) {
+        _beginPlaceHighlight();
+        return;
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) => _revealFocusedPattern());
       return;
     }
-    _revealedFocus = true;
-    try {
-      await Scrollable.ensureVisible(
-        target,
-        alignment: 0.32,
-        duration: const Duration(milliseconds: 450),
-        curve: Curves.easeOutCubic,
-      );
-    } catch (_) {
-      // Still flash the card even if it isn't in a scrollable yet.
+
+    final scrolled = await _smoothScrollToCenter(target);
+    if (!mounted || _revealedFocus) return;
+    if (!scrolled) {
+      _revealAttempts += 1;
+      if (_revealAttempts > 24) {
+        _beginPlaceHighlight();
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _revealFocusedPattern());
+      }
+      return;
     }
-    if (!mounted) return;
+
+    final settled = _focusKey.currentContext;
+    if (settled == null || !settled.mounted) {
+      _beginPlaceHighlight();
+      return;
+    }
+    await _waitUntilScrollSettles(settled);
+    if (!mounted || _revealedFocus) return;
+    _beginPlaceHighlight();
+  }
+
+  void _beginPlaceHighlight() {
+    if (!mounted || _revealedFocus) return;
+    _revealedFocus = true;
     setState(() => _showFocusEffect = true);
+  }
+
+  bool _scrollExtentSettled(BuildContext target) {
+    final position = Scrollable.maybeOf(target)?.position;
+    if (position == null || !position.hasContentDimensions) return false;
+    final extent = position.maxScrollExtent;
+    final settled = _lastScrollExtent != null && (extent - _lastScrollExtent!).abs() < 1;
+    _lastScrollExtent = extent;
+    return settled;
+  }
+
+  bool _isFocusLaidOut(BuildContext target) {
+    final object = target.findRenderObject();
+    return object is RenderBox && object.hasSize && object.attached && object.size.height > 1;
+  }
+
+  /// Smooth center scroll, like web `scrollIntoView({ behavior: "smooth", block: "center" })`.
+  /// Duration grows with distance so a long drop doesn't snap.
+  Future<bool> _smoothScrollToCenter(BuildContext target) async {
+    final object = target.findRenderObject();
+    if (object is! RenderBox || !object.hasSize || !object.attached) return false;
+    final viewport = RenderAbstractViewport.maybeOf(object);
+    final scrollable = Scrollable.maybeOf(target);
+    if (viewport == null || scrollable == null) return false;
+    final position = scrollable.position;
+    if (!position.hasContentDimensions) return false;
+
+    final targetOffset = viewport
+        .getOffsetToReveal(object, 0.5)
+        .offset
+        .clamp(position.minScrollExtent, position.maxScrollExtent);
+    final distance = (targetOffset - position.pixels).abs();
+    if (distance < 12) return true;
+
+    final ms = (480 + distance * 0.38).clamp(560.0, 1300.0).round();
+    await position.animateTo(
+      targetOffset,
+      duration: Duration(milliseconds: ms),
+      curve: Curves.easeInOutCubic,
+    );
+    return true;
+  }
+
+  /// Don't start the place effect until the card is on screen and the scroll has stopped.
+  Future<void> _waitUntilScrollSettles(BuildContext target) async {
+    final position = Scrollable.maybeOf(target)?.position;
+    if (position == null) return;
+    final done = Completer<void>();
+    var last = position.pixels;
+    var stable = 0;
+    var frames = 0;
+
+    void finish() {
+      if (!done.isCompleted) done.complete();
+    }
+
+    void step() {
+      if (!mounted || done.isCompleted) return;
+      frames += 1;
+      final now = position.pixels;
+      final still = (now - last).abs() < 0.5;
+      last = now;
+      if (still && _focusVisibleEnough(target)) {
+        stable += 1;
+        if (stable >= 8) {
+          finish();
+          return;
+        }
+      } else {
+        stable = 0;
+      }
+      if (frames > 90) {
+        finish();
+        return;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) => step());
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => step());
+    await done.future;
+  }
+
+  bool _focusVisibleEnough(BuildContext target) {
+    final box = target.findRenderObject();
+    final scrollable = Scrollable.maybeOf(target);
+    final scrollBox = scrollable?.context.findRenderObject();
+    if (box is! RenderBox || scrollBox is! RenderBox || !box.hasSize || !scrollBox.hasSize) {
+      return false;
+    }
+    final top = box.localToGlobal(Offset.zero, ancestor: scrollBox).dy;
+    final bottom = top + box.size.height;
+    final visible = (bottom.clamp(0.0, scrollBox.size.height) - top.clamp(0.0, scrollBox.size.height))
+        .clamp(0.0, box.size.height);
+    if (box.size.height <= 0) return false;
+    return visible / box.size.height >= 0.45;
   }
 
   void _onCategoryChanged(String value) {
@@ -462,7 +579,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             onClearSearch: _backToRankBoard,
           );
         }
-        return _patternColumn(page, showRank: !_isSearching);
+        return _patternColumn(page, showRank: !_isSearching, showSubmitInvite: !_isSearching);
       },
     );
   }
@@ -479,10 +596,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ],
       );
     }
-    return _patternColumn(_focusedPage!, showRank: true);
+    return _patternColumn(_focusedPage!, showRank: true, animateEntrance: false, showSubmitInvite: true);
   }
 
-  Widget _patternColumn(PatternsPage page, {required bool showRank}) {
+  Widget _patternColumn(
+    PatternsPage page, {
+    required bool showRank,
+    bool animateEntrance = true,
+    bool showSubmitInvite = false,
+  }) {
     return Column(
       children: [
         for (var i = 0; i < page.patterns.length; i++) ...[
@@ -492,6 +614,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             rank: page.rankOffset + i + 1,
             rankPeriod: period,
             showRank: showRank,
+            animateEntrance: animateEntrance,
             highlight: _showFocusEffect && page.patterns[i].id == _focusId,
           ),
           const SizedBox(height: 12),
@@ -500,7 +623,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Center(child: CircularProgressIndicator()),
-          ),
+          )
+        else if (showSubmitInvite && !page.hasMore)
+          const SubmitInviteCard(),
       ],
     );
   }

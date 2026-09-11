@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -29,6 +28,7 @@ class PatternCardWidget extends ConsumerStatefulWidget {
     this.rankPeriod = 'all',
     this.showRank = true,
     this.highlight = false,
+    this.animateEntrance = true,
   });
 
   final PatternCard pattern;
@@ -37,6 +37,8 @@ class PatternCardWidget extends ConsumerStatefulWidget {
   final bool showRank;
   /// Brief outline + shake after publish. Fades out on its own.
   final bool highlight;
+  /// Fade/slide used on the normal board. Off while scrolling a new pattern into place.
+  final bool animateEntrance;
 
   @override
   ConsumerState<PatternCardWidget> createState() => _PatternCardWidgetState();
@@ -52,8 +54,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
   late int _voteCount;
   int _imageIndex = 0;
   late final PageController _imageController;
-  AnimationController? _highlightFade;
-  AnimationController? _highlightShake;
+  AnimationController? _placeHighlight;
 
   @override
   void initState() {
@@ -66,8 +67,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
   @override
   void dispose() {
     _imageController.dispose();
-    _highlightFade?.dispose();
-    _highlightShake?.dispose();
+    _placeHighlight?.dispose();
     super.dispose();
   }
 
@@ -92,15 +92,11 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
   }
 
   void _startHighlight() {
-    _highlightFade?.dispose();
-    _highlightShake?.dispose();
-    _highlightFade = AnimationController(
+    _placeHighlight?.dispose();
+    // Matches web `.rank-place-highlight` (1.5s ease-out, then gone).
+    _placeHighlight = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1600),
-    )..forward();
-    _highlightShake = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 700),
+      duration: const Duration(milliseconds: 1500),
     )..forward();
   }
 
@@ -334,7 +330,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          LayoutBuilder(
+          _withHighlight(LayoutBuilder(
             builder: (context, constraints) {
               // Outer height from outer width. Do not size Row children to this
               // value — BoxDecoration.border insets the child, so fixed half×half
@@ -520,7 +516,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
                 ),
               );
             },
-          ),
+          )),
           if (widget.showRank)
             Positioned(
               left: -6,
@@ -555,8 +551,9 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
             ),
         ],
       ),
-    ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.04, end: 0);
-    return _withHighlight(card);
+    );
+    if (!widget.animateEntrance) return card;
+    return card.animate().fadeIn(duration: 300.ms).slideY(begin: 0.04, end: 0);
   }
 
   Widget _buildGallery(List<String> images, Color bg) {
@@ -633,40 +630,86 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
     );
   }
 
+  /// Web `rank-place-highlight`: 2px accent outline 4px outside the card,
+  /// a 3px ring, and a short left-right settle. Easing is applied per segment,
+  /// matching CSS `ease-out` between keyframes.
   Widget _withHighlight(Widget card) {
-    final fade = _highlightFade;
-    final shake = _highlightShake;
-    if (!widget.highlight || fade == null || shake == null) return card;
+    final place = _placeHighlight;
+    if (!widget.highlight || place == null) return card;
     return AnimatedBuilder(
-      animation: Listenable.merge([fade, shake]),
+      animation: place,
       child: card,
       builder: (context, child) {
-        final strength = 1 - Curves.easeOut.transform(fade.value);
-        if (strength < 0.02) return child!;
-        final shakeT = shake.value.clamp(0.0, 1.0);
-        final dx = math.sin(shakeT * math.pi * 5) * 6 * (1 - shakeT);
+        final t = place.value;
+        final dx = _keyframe(t, _placeStops, _placeOffsets);
+        final outline = _keyframe(t, _placeRingStops, _placeOutline);
+        final ring = _keyframe(t, _placeRingStops, _placeRing);
+        if (outline < 0.02 && dx.abs() < 0.2) return child!;
         return Transform.translate(
           offset: Offset(dx, 0),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: AppColors.accent.withValues(alpha: 0.9 * strength),
-                width: 2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.accent.withValues(alpha: 0.28 * strength),
-                  blurRadius: 18,
-                  spreadRadius: 1,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                left: -4,
+                top: -4,
+                right: -4,
+                bottom: -4,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppColors.accent.withValues(alpha: outline),
+                        width: 2,
+                      ),
+                    ),
+                  ),
                 ),
-              ],
-            ),
-            child: child,
+              ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.accent.withValues(alpha: ring),
+                          spreadRadius: 3,
+                          blurRadius: 0,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              child!,
+            ],
           ),
         );
       },
     );
+  }
+
+  static const _placeStops = [0.0, 0.10, 0.22, 0.34, 0.46, 0.58, 1.0];
+  static const _placeOffsets = [0.0, -5.0, 5.0, -3.0, 3.0, 0.0, 0.0];
+  static const _placeRingStops = [0.0, 0.10, 0.58, 1.0];
+  static const _placeOutline = [0.0, 1.0, 1.0, 0.0];
+  static const _placeRing = [0.0, 0.28, 0.22, 0.0];
+
+  static double _keyframe(double t, List<double> stops, List<double> values) {
+    if (t <= stops.first) return values.first;
+    if (t >= stops.last) return values.last;
+    for (var i = 0; i < stops.length - 1; i++) {
+      final start = stops[i];
+      final end = stops[i + 1];
+      if (t > end) continue;
+      final span = end - start;
+      final local = span == 0 ? 1.0 : ((t - start) / span).clamp(0.0, 1.0);
+      final eased = Curves.easeOut.transform(local);
+      return values[i] + (values[i + 1] - values[i]) * eased;
+    }
+    return values.last;
   }
 }
 
