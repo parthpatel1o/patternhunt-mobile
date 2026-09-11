@@ -102,7 +102,7 @@ class BoardDetailScreen extends ConsumerWidget {
                                   currentName: board.name,
                                 ),
                                 style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppColors.foreground,
+                                  foregroundColor: AppColors.muted,
                                   side: const BorderSide(color: AppColors.border),
                                   shape: const StadiumBorder(),
                                   padding: const EdgeInsets.symmetric(

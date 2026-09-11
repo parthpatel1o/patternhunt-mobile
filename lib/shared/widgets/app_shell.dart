@@ -99,6 +99,10 @@ class AppShell extends ConsumerWidget {
         location.startsWith('/insights') ||
         location.startsWith('/submit') ||
         location.startsWith('/settings');
+    final isMine = location.startsWith('/mine');
+    final myPatternCount = isMine
+        ? ref.watch(myPatternsProvider).valueOrNull?.length
+        : null;
     final pageTitle = _titleForLocation(location);
     final useLargePageTitle = location.startsWith('/saved') ||
         location.startsWith('/mine') ||
@@ -126,6 +130,44 @@ class AppShell extends ConsumerWidget {
               ),
             ],
           )
+        : isMine
+            ? Column(
+                key: const ValueKey('title-mine'),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'My patterns',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 22,
+                          height: 1.05,
+                          color: AppColors.foreground,
+                        ),
+                  ),
+                  if (myPatternCount != null) ...[
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Text(
+                        myPatternCount == 1
+                            ? '1 pattern'
+                            : '$myPatternCount patterns',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          height: 1.15,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              )
         : Text(
             pageTitle,
             key: ValueKey('title-$pageTitle'),
@@ -143,6 +185,7 @@ class AppShell extends ConsumerWidget {
       appBar: hideAppBar
           ? null
           : AppBar(
+              toolbarHeight: isMine ? 76 : kToolbarHeight,
               leading: showBackToProfile
                   ? IconButton(
                       tooltip: 'Back to Profile',
