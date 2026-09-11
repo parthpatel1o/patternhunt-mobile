@@ -15,7 +15,7 @@ import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/category_icons.dart';
 import '../../shared/widgets/app_snack_bar.dart';
-import '../../shared/widgets/cover_square_prompt.dart';
+import '../../shared/widgets/reorderable_photo_grid.dart';
 
 class SubmitScreen extends ConsumerStatefulWidget {
   const SubmitScreen({super.key});
@@ -82,7 +82,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     return out;
   }
 
-  Future<void> _syncCoverSquare({bool prompt = false}) async {
+  Future<void> _syncCoverSquare() async {
     if (_images.isEmpty) {
       if (!mounted) return;
       setState(() => _coverNotSquare = false);
@@ -92,10 +92,6 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
       final square = await isNearlySquareFile(_images.first);
       if (!mounted) return;
       setState(() => _coverNotSquare = !square);
-      if (prompt && !square) {
-        final crop = await showCoverSquarePrompt(context);
-        if (crop && mounted) await _cropImageAt(0);
-      }
     } catch (_) {
       if (mounted) setState(() => _coverNotSquare = false);
     }
@@ -139,24 +135,27 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
       }
       if (!mounted) return;
       setState(() => _images.addAll(prepared));
-      // Prompt only when a newly added photo became the cover.
       if (coverIndexBefore == 0 && prepared.isNotEmpty) {
-        await _syncCoverSquare(prompt: true);
+        await _syncCoverSquare();
       }
     } finally {
       if (mounted) setState(() => _preparing = false);
     }
   }
 
-  Future<void> _moveImage(int from, int to) async {
+  void _moveImage(int from, int to) {
     if (from == to || from < 0 || to < 0 || from >= _images.length || to >= _images.length) {
       return;
     }
+    final coverChanged = from == 0 || to == 0;
     setState(() {
       final item = _images.removeAt(from);
       _images.insert(to, item);
     });
-    await _syncCoverSquare();
+    if (coverChanged) {
+      // Don't block the drop animation on square checks.
+      _syncCoverSquare();
+    }
   }
 
   void _openPhotoViewer(int initialIndex) {
@@ -194,7 +193,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
   Widget _photoTile(int index) {
     final file = _images[index];
     final coverBad = index == 0 && _coverNotSquare;
-    final tile = SizedBox(
+    return SizedBox(
       width: _tileSize,
       height: _tileSize,
       child: DecoratedBox(
@@ -268,39 +267,14 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
         ),
       ),
     );
+  }
 
-    return LongPressDraggable<int>(
-      data: index,
-      feedback: Material(
-        elevation: 6,
-        borderRadius: BorderRadius.circular(16),
-        child: SizedBox(
-          width: _tileSize,
-          height: _tileSize,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: ColoredBox(
-              color: AppColors.background,
-              child: Image.file(file, fit: BoxFit.contain),
-            ),
-          ),
-        ),
-      ),
-      childWhenDragging: Opacity(opacity: 0.35, child: tile),
-      child: DragTarget<int>(
-        onWillAcceptWithDetails: (details) => details.data != index,
-        onAcceptWithDetails: (details) => _moveImage(details.data, index),
-        builder: (context, candidate, rejected) {
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: candidate.isNotEmpty
-                  ? Border.all(color: AppColors.accent, width: 2)
-                  : null,
-            ),
-            child: tile,
-          );
-        },
+  Widget _photoFeedback(int index) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: ColoredBox(
+        color: AppColors.background,
+        child: Image.file(_images[index], fit: BoxFit.contain),
       ),
     );
   }
@@ -484,7 +458,8 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
       ref.invalidate(patternsProvider);
       ref.invalidate(profileProvider);
       if (mounted) {
-        context.go('/');
+        // Force the submitted category so preferred-category doesn't hide it.
+        context.go('/?category=$_category');
         showAppSnackBar(
           context,
           message: 'Your pattern has been added.',
@@ -628,18 +603,22 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Choose one or more photos. The cover photo must be square.',
+                'Choose one or more photos. Drag the handle to reorder — the cover photo must be square.',
                 style: textTheme.bodySmall?.copyWith(color: AppColors.muted),
               ),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  for (var i = 0; i < _images.length; i++) _photoTile(i),
-                  if (_images.length < AppConstants.instance.maxPatternImages)
-                    _addPhotosCard(AppConstants.instance.maxPatternImages - _images.length),
-                ],
+              ReorderablePhotoGrid(
+                itemCount: _images.length,
+                tileSize: _tileSize,
+                enabled: !_preparing && !_uploading,
+                tileBuilder: (context, index) => _photoTile(index),
+                feedbackBuilder: (context, index) => _photoFeedback(index),
+                onReorder: _moveImage,
+                trailing: _images.length < AppConstants.instance.maxPatternImages
+                    ? _addPhotosCard(
+                        AppConstants.instance.maxPatternImages - _images.length,
+                      )
+                    : null,
               ),
               if (_coverNotSquare) ...[
                 const SizedBox(height: 10),

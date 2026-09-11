@@ -7,6 +7,7 @@ import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/app_empty_state.dart';
 import '../../shared/widgets/pattern_card_widget.dart';
+import 'rename_folder_dialog.dart';
 
 class BoardDetailScreen extends ConsumerWidget {
   const BoardDetailScreen({super.key, required this.boardId});
@@ -94,6 +95,29 @@ class BoardDetailScreen extends ConsumerWidget {
                                 ),
                               ),
                               OutlinedButton(
+                                onPressed: () => showRenameFolderDialog(
+                                  context,
+                                  ref,
+                                  boardId: board.id,
+                                  currentName: board.name,
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.foreground,
+                                  side: const BorderSide(color: AppColors.border),
+                                  shape: const StadiumBorder(),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                child: const Text('Rename'),
+                              ),
+                              const SizedBox(width: 8),
+                              OutlinedButton(
                                 onPressed: () => _deleteBoard(
                                   context,
                                   ref,
@@ -113,7 +137,7 @@ class BoardDetailScreen extends ConsumerWidget {
                                     fontSize: 13,
                                   ),
                                 ),
-                                child: const Text('Delete folder'),
+                                child: const Text('Delete'),
                               ),
                             ],
                           ),

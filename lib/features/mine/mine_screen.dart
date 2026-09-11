@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/analytics/analytics.dart';
 import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/app_empty_state.dart';
+import '../../shared/widgets/in_app_webview.dart';
 
 class MineScreen extends ConsumerWidget {
   const MineScreen({super.key});
@@ -74,14 +77,64 @@ class MineScreen extends ConsumerWidget {
   }
 }
 
-class _MyPatternRow extends ConsumerWidget {
+class _MyPatternRow extends ConsumerStatefulWidget {
   const _MyPatternRow({required this.pattern, this.insight});
 
   final PatternCard pattern;
   final DesignerPatternInsight? insight;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_MyPatternRow> createState() => _MyPatternRowState();
+}
+
+class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
+  bool _ctaLoading = false;
+
+  PatternCard get pattern => widget.pattern;
+  DesignerPatternInsight? get insight => widget.insight;
+
+  bool get _showDownload => pattern.isFree && pattern.hasPdf;
+  bool get _showView => !_showDownload && pattern.patternUrl != null;
+  bool get _hasCta => _showDownload || _showView;
+
+  Future<void> _onViewPattern() async {
+    final api = ref.read(apiClientProvider);
+    if (_showDownload) {
+      setState(() => _ctaLoading = true);
+      try {
+        Analytics.trackPatternCta(api, pattern.id, 'pdf');
+        final result = await api.getData(
+          '/patterns/${pattern.id}/pdf',
+          map: (j) => j as Map<String, dynamic>,
+        );
+        final url = result['url'] as String?;
+        if (url != null) {
+          await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        }
+      } on ApiException catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(e.message)));
+        }
+      } finally {
+        if (mounted) setState(() => _ctaLoading = false);
+      }
+      return;
+    }
+    if (pattern.patternUrl != null) {
+      Analytics.trackPatternCta(api, pattern.id, 'view');
+      if (mounted) {
+        await openInAppWebView(
+          context,
+          url: pattern.patternUrl!,
+          title: pattern.title,
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cover = pattern.imageUrls.isNotEmpty ? pattern.imageUrls.first : null;
     final extraPhotos = (pattern.imageUrls.length - 1).clamp(0, 999);
     final saveCount = insight?.saveCount ?? 0;
@@ -260,17 +313,49 @@ class _MyPatternRow extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 12),
+            if (_hasCta) ...[
+              FilledButton.icon(
+                onPressed: _ctaLoading ? null : _onViewPattern,
+                icon: _ctaLoading
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        _showDownload
+                            ? Icons.download_outlined
+                            : Icons.open_in_new_rounded,
+                        size: 14,
+                      ),
+                label: Text(_showDownload ? 'Download' : 'View pattern'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: AppColors.accentForeground,
+                  disabledBackgroundColor:
+                      AppColors.accent.withValues(alpha: 0.6),
+                  shape: const StadiumBorder(),
+                  visualDensity: VisualDensity.compact,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  textStyle: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             Row(
               children: [
                 Expanded(
-                  child: FilledButton.icon(
+                  child: OutlinedButton.icon(
                     onPressed: () =>
                         context.push('/mine/${pattern.id}/edit'),
                     icon: const Icon(Icons.edit_outlined, size: 14),
                     label: const Text('Edit'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      foregroundColor: AppColors.accentForeground,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.foreground,
+                      side: const BorderSide(color: AppColors.border),
+                      backgroundColor: AppColors.card,
                       shape: const StadiumBorder(),
                       visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.symmetric(
