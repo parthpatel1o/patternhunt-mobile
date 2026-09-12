@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/api/api_client.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -19,17 +21,13 @@ Future<void> showCreateFolderDialog(BuildContext context, WidgetRef ref) async {
           children: [
             Text(
               'New folder',
-              style: Theme.of(ctx)
-                  .textTheme
-                  .titleLarge
+              style: Theme.of(ctx).textTheme.titleLarge
                   ?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 4),
             Text(
               'Name your folder, then bookmark patterns to add them here.',
-              style: Theme.of(ctx)
-                  .textTheme
-                  .bodySmall
+              style: Theme.of(ctx).textTheme.bodySmall
                   ?.copyWith(color: AppColors.muted),
             ),
             const SizedBox(height: 16),
@@ -41,10 +39,10 @@ Future<void> showCreateFolderDialog(BuildContext context, WidgetRef ref) async {
                     autofocus: true,
                     maxLength: 40,
                     style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.foreground,
-                        ),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.foreground,
+                    ),
                     decoration: InputDecoration(
                       hintText: 'Folder name',
                       hintStyle: const TextStyle(
@@ -54,7 +52,9 @@ Future<void> showCreateFolderDialog(BuildContext context, WidgetRef ref) async {
                       ),
                       counterText: '',
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(999),
                         borderSide: const BorderSide(color: AppColors.border),
@@ -89,6 +89,18 @@ Future<void> showCreateFolderDialog(BuildContext context, WidgetRef ref) async {
     ),
   );
   if (name == null || name.isEmpty) return;
+  if (name.toLowerCase() == kDefaultBoardName.toLowerCase()) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '“$kDefaultBoardName” is reserved for your default folder.',
+          ),
+        ),
+      );
+    }
+    return;
+  }
   try {
     await ref.read(apiClientProvider).post('/boards', data: {'name': name});
     ref.invalidate(boardsWithPatternsProvider);

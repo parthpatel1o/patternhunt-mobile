@@ -1,6 +1,6 @@
 {
   "appName": "Pattern Hunt",
-  "defaultBoardName": "Saved",
+  "defaultBoardName": "All",
   "categories": [
     { "slug": "amigurumi", "name": "Amigurumi" },
     { "slug": "wearables", "name": "Wearables" },

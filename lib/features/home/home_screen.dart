@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../core/constants/app_constants.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
@@ -25,6 +26,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
   final String? initialQuery;
   final String? focusPatternId;
+
   /// When set (e.g. after submit), force this category on the rank board.
   final String? initialCategory;
   final String? initialPeriod;
@@ -60,7 +62,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   String? _categoryLabel(AppConstants constants) {
     if (category == null) return null;
-    return constants.categories.where((c) => c.slug == category).map((c) => c.name).firstOrNull;
+    return constants.categories
+        .where((c) => c.slug == category)
+        .map((c) => c.name)
+        .firstOrNull;
   }
 
   void _backToRankBoard() {
@@ -70,14 +75,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    searchQuery = widget.initialQuery?.trim().isEmpty == true ? null : widget.initialQuery?.trim();
+    searchQuery = widget.initialQuery?.trim().isEmpty == true
+        ? null
+        : widget.initialQuery?.trim();
     final forced = widget.initialCategory?.trim();
     if (forced != null && forced.isNotEmpty) {
       category = forced == 'all' ? null : forced;
       _categoryInitialized = true;
     }
     final forcedPeriod = widget.initialPeriod?.trim();
-    if (forcedPeriod == 'all' || forcedPeriod == 'week' || forcedPeriod == 'month') {
+    if (forcedPeriod == 'all' ||
+        forcedPeriod == 'week' ||
+        forcedPeriod == 'month') {
       period = forcedPeriod!;
     }
     final focusId = widget.focusPatternId?.trim();
@@ -156,7 +165,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         }
       });
       if (found) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _revealFocusedPattern());
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _revealFocusedPattern(),
+        );
       }
     } catch (_) {
       if (!mounted || _focusId != id) return;
@@ -175,14 +186,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     try {
       final focused = await api.getData(
         '/patterns',
-        query: {
-          ...query.toQuery(),
-          'pattern': patternId,
-        },
+        query: {...query.toQuery(), 'pattern': patternId},
         map: (json) => json as Map<String, dynamic>,
       );
       final page = PatternsPage.fromJson(focused);
-      if (focused['found'] == true && page.patterns.any((pattern) => pattern.id == patternId)) {
+      if (focused['found'] == true &&
+          page.patterns.any((pattern) => pattern.id == patternId)) {
         return page;
       }
       if (page.patterns.any((pattern) => pattern.id == patternId)) {
@@ -196,7 +205,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     // Older API ignores `pattern` and always returns the first page.
-    final PatternsPage start = firstPage ??
+    final PatternsPage start =
+        firstPage ??
         await api.getData(
           '/patterns',
           query: query.toQuery(),
@@ -226,19 +236,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _loadMoreFocused() async {
     final current = _focusedPage;
-    if (current == null || !current.hasMore || current.nextOffset == null || current.loadingMore) {
+    if (current == null ||
+        !current.hasMore ||
+        current.nextOffset == null ||
+        current.loadingMore) {
       return;
     }
     setState(() => _focusedPage = current.copyWith(loadingMore: true));
     try {
-      final next = await ref.read(apiClientProvider).getData(
+      final next = await ref
+          .read(apiClientProvider)
+          .getData(
             '/patterns',
-            query: PatternQuery(category: category, period: period).toQuery(offset: current.nextOffset!),
+            query: PatternQuery(
+              category: category,
+              period: period,
+            ).toQuery(offset: current.nextOffset!),
             map: (json) => PatternsPage.fromJson(json as Map<String, dynamic>),
           );
       if (!mounted) return;
       final seen = current.patterns.map((pattern) => pattern.id).toSet();
-      final appended = next.patterns.where((pattern) => !seen.contains(pattern.id)).toList();
+      final appended = next.patterns
+          .where((pattern) => !seen.contains(pattern.id))
+          .toList();
       setState(() {
         _focusedPage = PatternsPage(
           patterns: [...current.patterns, ...appended],
@@ -256,13 +276,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _revealFocusedPattern() async {
     if (!mounted || _revealedFocus || _focusId == null) return;
     final target = _focusKey.currentContext;
-    if (target == null || !_isFocusLaidOut(target) || !_scrollExtentSettled(target)) {
+    if (target == null ||
+        !_isFocusLaidOut(target) ||
+        !_scrollExtentSettled(target)) {
       _revealAttempts += 1;
       if (_revealAttempts > 24) {
         _beginPlaceHighlight();
         return;
       }
-      WidgetsBinding.instance.addPostFrameCallback((_) => _revealFocusedPattern());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _revealFocusedPattern(),
+      );
       return;
     }
 
@@ -273,7 +297,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (_revealAttempts > 24) {
         _beginPlaceHighlight();
       } else {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _revealFocusedPattern());
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _revealFocusedPattern(),
+        );
       }
       return;
     }
@@ -298,21 +324,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final position = Scrollable.maybeOf(target)?.position;
     if (position == null || !position.hasContentDimensions) return false;
     final extent = position.maxScrollExtent;
-    final settled = _lastScrollExtent != null && (extent - _lastScrollExtent!).abs() < 1;
+    final settled =
+        _lastScrollExtent != null && (extent - _lastScrollExtent!).abs() < 1;
     _lastScrollExtent = extent;
     return settled;
   }
 
   bool _isFocusLaidOut(BuildContext target) {
     final object = target.findRenderObject();
-    return object is RenderBox && object.hasSize && object.attached && object.size.height > 1;
+    return object is RenderBox &&
+        object.hasSize &&
+        object.attached &&
+        object.size.height > 1;
   }
 
   /// Smooth center scroll, like web `scrollIntoView({ behavior: "smooth", block: "center" })`.
   /// Duration grows with distance so a long drop doesn't snap.
   Future<bool> _smoothScrollToCenter(BuildContext target) async {
     final object = target.findRenderObject();
-    if (object is! RenderBox || !object.hasSize || !object.attached) return false;
+    if (object is! RenderBox || !object.hasSize || !object.attached)
+      return false;
     final viewport = RenderAbstractViewport.maybeOf(object);
     final scrollable = Scrollable.maybeOf(target);
     if (viewport == null || scrollable == null) return false;
@@ -378,13 +409,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final box = target.findRenderObject();
     final scrollable = Scrollable.maybeOf(target);
     final scrollBox = scrollable?.context.findRenderObject();
-    if (box is! RenderBox || scrollBox is! RenderBox || !box.hasSize || !scrollBox.hasSize) {
+    if (box is! RenderBox ||
+        scrollBox is! RenderBox ||
+        !box.hasSize ||
+        !scrollBox.hasSize) {
       return false;
     }
     final top = box.localToGlobal(Offset.zero, ancestor: scrollBox).dy;
     final bottom = top + box.size.height;
-    final visible = (bottom.clamp(0.0, scrollBox.size.height) - top.clamp(0.0, scrollBox.size.height))
-        .clamp(0.0, box.size.height);
+    final visible =
+        (bottom.clamp(0.0, scrollBox.size.height) -
+                top.clamp(0.0, scrollBox.size.height))
+            .clamp(0.0, box.size.height);
     if (box.size.height <= 0) return false;
     return visible / box.size.height >= 0.45;
   }
@@ -406,7 +442,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     setState(() => period = value);
   }
 
-  String _rankBoardLocation({required String? category, required String period}) {
+  String _rankBoardLocation({
+    required String? category,
+    required String period,
+  }) {
     return Uri(
       path: '/',
       queryParameters: {
@@ -430,7 +469,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         category ??= constants.defaultRankBoardCategory;
         _categoryInitialized = true;
       } else if (profile != null) {
-        final defaultSlug = profile.defaultCategorySlug ?? constants.defaultUserCategory;
+        final defaultSlug =
+            profile.defaultCategorySlug ?? constants.defaultUserCategory;
         category = defaultSlug == 'all' ? null : defaultSlug;
         _categoryInitialized = true;
       }
@@ -463,26 +503,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             Text(
               'Discover crochet patterns ranked by the community.',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    height: 1.25,
-                  ),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.w700, height: 1.25),
             ),
             const SizedBox(height: 14),
             _CategoryDropdown(
               value: category ?? 'all',
               entries: [
                 (value: 'all', label: 'All categories'),
-                for (final c in constants.categories) (value: c.slug, label: c.name),
+                for (final c in constants.categories)
+                  (value: c.slug, label: c.name),
               ],
               onChanged: _onCategoryChanged,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 for (final p in constants.rankPeriods) ...[
-                  if (p != constants.rankPeriods.first) const SizedBox(width: 18),
+                  if (p != constants.rankPeriods.first)
+                    const SizedBox(width: 24),
                   _PeriodLink(
                     label: p.label,
                     selected: period == p.value,
@@ -503,13 +543,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.chevron_left, size: 20, color: AppColors.accent),
+                      const Icon(
+                        Icons.chevron_left,
+                        size: 20,
+                        color: AppColors.accent,
+                      ),
                       Text(
                         'Back to rank board',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppColors.accent,
-                              fontWeight: FontWeight.w600,
-                            ),
+                          color: AppColors.accent,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ),
@@ -519,7 +563,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: 10),
             Text(
               'Results for “$searchQuery”',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
           ],
@@ -535,7 +580,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildSinglePatternResults(AppConstants constants) {
-    final patternAsync = ref.watch(patternDetailProvider(widget.focusPatternId!));
+    final patternAsync = ref.watch(
+      patternDetailProvider(widget.focusPatternId!),
+    );
     return patternAsync.when(
       loading: () => const PatternCardSkeleton(),
       error: (_, _) => HomeEmptyState(
@@ -567,7 +614,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       error: (e, _) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 48),
         child: Center(
-          child: Text('Could not load patterns\n$e', textAlign: TextAlign.center),
+          child: Text(
+            'Could not load patterns\n$e',
+            textAlign: TextAlign.center,
+          ),
         ),
       ),
       data: (page) {
@@ -611,7 +661,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  void _applyFocusedVote(String patternId, {required bool voted, required int voteCount}) {
+  void _applyFocusedVote(
+    String patternId, {
+    required bool voted,
+    required int voteCount,
+  }) {
     final page = _focusedPage;
     if (page == null) return;
     final updated = [
@@ -637,7 +691,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       children: [
         for (var i = 0; i < page.patterns.length; i++) ...[
           PatternCardWidget(
-            key: page.patterns[i].id == _focusId ? _focusKey : ValueKey(page.patterns[i].id),
+            key: page.patterns[i].id == _focusId
+                ? _focusKey
+                : ValueKey(page.patterns[i].id),
             pattern: page.patterns[i],
             rank: page.rankOffset + i + 1,
             rankPeriod: period,
@@ -647,9 +703,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             onVoteChange: reorderOnVote
                 ? (patternId, voted, voteCount) {
                     if (_rankFocusMode) {
-                      _applyFocusedVote(patternId, voted: voted, voteCount: voteCount);
+                      _applyFocusedVote(
+                        patternId,
+                        voted: voted,
+                        voteCount: voteCount,
+                      );
                     } else if (boardQuery != null) {
-                      ref.read(patternsProvider(boardQuery).notifier).applyVote(
+                      ref
+                          .read(patternsProvider(boardQuery).notifier)
+                          .applyVote(
                             patternId,
                             voted: voted,
                             voteCount: voteCount,
@@ -729,7 +791,8 @@ class _CategoryDropdown extends StatelessWidget {
   final ValueChanged<String> onChanged;
 
   String get _label =>
-      entries.where((e) => e.value == value).map((e) => e.label).firstOrNull ?? 'All categories';
+      entries.where((e) => e.value == value).map((e) => e.label).firstOrNull ??
+      'All categories';
 
   @override
   Widget build(BuildContext context) {
@@ -744,7 +807,9 @@ class _CategoryDropdown extends StatelessWidget {
             elevation: const WidgetStatePropertyAll(10),
             shadowColor: const WidgetStatePropertyAll(Color(0x383D2F4A)),
             minimumSize: WidgetStatePropertyAll(Size(menuWidth, 0)),
-            maximumSize: WidgetStatePropertyAll(Size(menuWidth, double.infinity)),
+            maximumSize: WidgetStatePropertyAll(
+              Size(menuWidth, double.infinity),
+            ),
             shape: WidgetStatePropertyAll(
               RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -778,14 +843,19 @@ class _CategoryDropdown extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(16, 0, 14, 0),
                       child: Row(
                         children: [
-                          Icon(selectedIcon, size: 16, color: AppColors.foreground),
+                          Icon(
+                            selectedIcon,
+                            size: 16,
+                            color: AppColors.foreground,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _label,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
                                     fontWeight: FontWeight.w700,
                                     fontSize: 14,
                                     color: AppColors.foreground,
@@ -815,13 +885,21 @@ class _CategoryDropdown extends StatelessWidget {
                 onPressed: () => onChanged(entry.value),
                 style: ButtonStyle(
                   backgroundColor: WidgetStatePropertyAll(
-                    entry.value == value ? AppColors.primary : Colors.transparent,
+                    entry.value == value
+                        ? AppColors.primary
+                        : Colors.transparent,
                   ),
                   shape: WidgetStatePropertyAll(
-                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                  padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
-                  overlayColor: WidgetStatePropertyAll(AppColors.primary.withValues(alpha: 0.35)),
+                  padding: const WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  overlayColor: WidgetStatePropertyAll(
+                    AppColors.primary.withValues(alpha: 0.35),
+                  ),
                   minimumSize: WidgetStatePropertyAll(Size(menuWidth - 12, 44)),
                 ),
                 child: Row(
@@ -829,7 +907,9 @@ class _CategoryDropdown extends StatelessWidget {
                     Icon(
                       categoryIcon(entry.value),
                       size: 16,
-                      color: entry.value == value ? AppColors.primaryForeground : AppColors.foreground,
+                      color: entry.value == value
+                          ? AppColors.primaryForeground
+                          : AppColors.foreground,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -838,7 +918,9 @@ class _CategoryDropdown extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
-                          color: entry.value == value ? AppColors.primaryForeground : AppColors.foreground,
+                          color: entry.value == value
+                              ? AppColors.primaryForeground
+                              : AppColors.foreground,
                         ),
                       ),
                     ),

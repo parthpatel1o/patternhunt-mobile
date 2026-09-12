@@ -2,6 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 
+/// Default saved-patterns folder. Matches web `DEFAULT_BOARD_NAME`.
+const kDefaultBoardName = 'All';
+
 class CategoryOption {
   const CategoryOption({required this.slug, required this.name});
 
@@ -56,7 +59,8 @@ class AppConstants {
 
   static AppConstants get instance {
     final value = _instance;
-    if (value == null) throw StateError('AppConstants.load() must be called before use');
+    if (value == null)
+      throw StateError('AppConstants.load() must be called before use');
     return value;
   }
 
@@ -65,13 +69,28 @@ class AppConstants {
     final json = jsonDecode(raw) as Map<String, dynamic>;
     _instance = AppConstants._(
       categories: (json['categories'] as List<dynamic>)
-          .map((e) => CategoryOption(slug: e['slug'] as String, name: e['name'] as String))
+          .map(
+            (e) => CategoryOption(
+              slug: e['slug'] as String,
+              name: e['name'] as String,
+            ),
+          )
           .toList(),
       rankPeriods: (json['rankPeriods'] as List<dynamic>)
-          .map((e) => RankPeriodOption(value: e['value'] as String, label: e['label'] as String))
+          .map(
+            (e) => RankPeriodOption(
+              value: e['value'] as String,
+              label: e['label'] as String,
+            ),
+          )
           .toList(),
       huntOrders: (json['huntOrders'] as List<dynamic>? ?? const [])
-          .map((e) => HuntOrderOption(value: e['value'] as String, label: e['label'] as String))
+          .map(
+            (e) => HuntOrderOption(
+              value: e['value'] as String,
+              label: e['label'] as String,
+            ),
+          )
           .toList(),
       defaultHuntOrder: json['defaultHuntOrder'] as String? ?? 'random',
       defaultHuntCategory: json['defaultHuntCategory'] as String? ?? 'all',

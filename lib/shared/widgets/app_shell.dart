@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../features/saved/create_folder_dialog.dart';
@@ -58,11 +59,31 @@ class AppShell extends ConsumerWidget {
     // Logged out: Home | Hunt | Profile
     // Designer tools (My patterns / Insights / Submit) live under Profile.
     final items = <_NavItem>[
-      const _NavItem(route: '/', label: 'Home', icon: Icons.home_outlined, selectedIcon: Icons.home_rounded),
-      const _NavItem(route: '/hunt', label: 'Hunt', icon: Icons.explore_outlined, selectedIcon: Icons.explore_rounded),
+      const _NavItem(
+        route: '/',
+        label: 'Home',
+        icon: Icons.home_outlined,
+        selectedIcon: Icons.home_rounded,
+      ),
+      const _NavItem(
+        route: '/hunt',
+        label: 'Hunt',
+        icon: Icons.explore_outlined,
+        selectedIcon: Icons.explore_rounded,
+      ),
       if (isLoggedIn)
-        const _NavItem(route: '/saved', label: 'Saved', icon: Icons.bookmark_outline, selectedIcon: Icons.bookmark_rounded),
-      const _NavItem(route: '/profile', label: 'Profile', icon: Icons.person_outline, selectedIcon: Icons.person_rounded),
+        const _NavItem(
+          route: '/saved',
+          label: 'Saved',
+          icon: Icons.bookmark_outline,
+          selectedIcon: Icons.bookmark_rounded,
+        ),
+      const _NavItem(
+        route: '/profile',
+        label: 'Profile',
+        icon: Icons.person_outline,
+        selectedIcon: Icons.person_rounded,
+      ),
     ];
 
     int selectedIndex = 0;
@@ -85,17 +106,21 @@ class AppShell extends ConsumerWidget {
       if (selectedIndex < 0) selectedIndex = 0;
     }
 
-    final hideBottomNav = location.startsWith('/login') || location.startsWith('/reset-password');
+    final hideBottomNav =
+        location.startsWith('/login') || location.startsWith('/reset-password');
     final isProfileRoute =
         location.startsWith('/profile') || location.startsWith('/settings');
     // Logged-out profile embeds LoginScreen; skip AppBar so "Profile" isn't redundant.
-    final hideAppBar = _isImmersive(location) || (isProfileRoute && !isLoggedIn);
+    final hideAppBar =
+        _isImmersive(location) || (isProfileRoute && !isLoggedIn);
     final isHome = location == '/' || location.isEmpty;
     final showHomeActions = isHome;
-    final showSubmit = showHomeActions && isDesigner && !location.startsWith('/submit');
+    final showSubmit =
+        showHomeActions && isDesigner && !location.startsWith('/submit');
     final showNewFolder = isLoggedIn && location == '/saved';
     final showMineSubmit = isDesigner && location.startsWith('/mine');
-    final showBackToProfile = location.startsWith('/mine') ||
+    final showBackToProfile =
+        location.startsWith('/mine') ||
         location.startsWith('/insights') ||
         location.startsWith('/submit') ||
         location.startsWith('/settings');
@@ -104,7 +129,8 @@ class AppShell extends ConsumerWidget {
         ? ref.watch(myPatternsProvider).valueOrNull?.length
         : null;
     final pageTitle = _titleForLocation(location);
-    final useLargePageTitle = location.startsWith('/saved') ||
+    final useLargePageTitle =
+        location.startsWith('/saved') ||
         location.startsWith('/mine') ||
         location.startsWith('/profile') ||
         location.startsWith('/settings') ||
@@ -121,64 +147,64 @@ class AppShell extends ConsumerWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 17,
-                        height: 1.1,
-                        color: AppColors.accent,
-                      ),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 17,
+                    height: 1.1,
+                    color: AppColors.accent,
+                  ),
                 ),
               ),
             ],
           )
         : isMine
-            ? Column(
-                key: const ValueKey('title-mine'),
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'My patterns',
+        ? Column(
+            key: const ValueKey('title-mine'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'My patterns',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 22,
+                  height: 1.05,
+                  color: AppColors.foreground,
+                ),
+              ),
+              if (myPatternCount != null) ...[
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(
+                    myPatternCount == 1
+                        ? '1 pattern'
+                        : '$myPatternCount patterns',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 22,
-                          height: 1.05,
-                          color: AppColors.foreground,
-                        ),
-                  ),
-                  if (myPatternCount != null) ...[
-                    const SizedBox(height: 6),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 2),
-                      child: Text(
-                        myPatternCount == 1
-                            ? '1 pattern'
-                            : '$myPatternCount patterns',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          height: 1.15,
-                          color: AppColors.muted,
-                        ),
-                      ),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      height: 1.15,
+                      color: AppColors.muted,
                     ),
-                  ],
-                ],
-              )
+                  ),
+                ),
+              ],
+            ],
+          )
         : Text(
             pageTitle,
             key: ValueKey('title-$pageTitle'),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontSize: useLargePageTitle ? 22 : 17,
-                  height: 1.1,
-                  color: AppColors.foreground,
-                ),
+              fontWeight: FontWeight.w700,
+              fontSize: useLargePageTitle ? 22 : 17,
+              height: 1.1,
+              color: AppColors.foreground,
+            ),
           );
 
     return Scaffold(
@@ -209,7 +235,9 @@ class AppShell extends ConsumerWidget {
                     tooltip: 'Search',
                     circleKey: searchButtonKey,
                     onPressed: () {
-                      final box = searchButtonKey.currentContext?.findRenderObject() as RenderBox?;
+                      final box =
+                          searchButtonKey.currentContext?.findRenderObject()
+                              as RenderBox?;
                       Rect? origin;
                       if (box != null && box.hasSize) {
                         origin = box.localToGlobal(Offset.zero) & box.size;
@@ -218,7 +246,11 @@ class AppShell extends ConsumerWidget {
                     },
                     background: AppColors.card,
                     border: AppColors.border,
-                    child: const Icon(Icons.search, size: 20, color: AppColors.accent),
+                    child: const Icon(
+                      Icons.search,
+                      size: 20,
+                      color: AppColors.accent,
+                    ),
                   ),
                   if (showSubmit)
                     Padding(
@@ -268,7 +300,7 @@ class AppShell extends ConsumerWidget {
   }
 
   static String _titleForLocation(String location) {
-    if (location.startsWith('/hunt')) return 'Hunting Patterns';
+    if (location.startsWith('/hunt')) return 'Hunt';
     if (location.startsWith('/saved')) return 'Saved';
     if (location.startsWith('/mine')) return 'My patterns';
     if (location.startsWith('/profile')) return 'Profile';
@@ -306,7 +338,10 @@ class _HeaderCircleButton extends StatelessWidget {
       onPressed: onPressed,
       padding: EdgeInsets.zero,
       visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints.tightFor(width: _size + 8, height: _size + 8),
+      constraints: const BoxConstraints.tightFor(
+        width: _size + 8,
+        height: _size + 8,
+      ),
       icon: Container(
         key: circleKey,
         width: _size,
@@ -377,10 +412,17 @@ class _BrandBottomNav extends StatelessWidget {
           height: _barHeight,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final available = (constraints.maxWidth - _sideInset * 2).clamp(0.0, double.infinity);
-              final maxItemWidth =
-                  items.length <= 3 ? _maxItemWidthThree : _maxItemWidthFour;
-              final rowWidth = (items.length * maxItemWidth).clamp(0.0, available);
+              final available = (constraints.maxWidth - _sideInset * 2).clamp(
+                0.0,
+                double.infinity,
+              );
+              final maxItemWidth = items.length <= 3
+                  ? _maxItemWidthThree
+                  : _maxItemWidthFour;
+              final rowWidth = (items.length * maxItemWidth).clamp(
+                0.0,
+                available,
+              );
 
               return Align(
                 alignment: Alignment.center,
@@ -446,7 +488,9 @@ class _BrandNavItem extends StatelessWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: selected ? AppColors.primary.withValues(alpha: 0.85) : Colors.transparent,
+                  color: selected
+                      ? AppColors.primary.withValues(alpha: 0.85)
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: AnimatedSwitcher(
@@ -457,7 +501,10 @@ class _BrandNavItem extends StatelessWidget {
                     return FadeTransition(
                       opacity: animation,
                       child: ScaleTransition(
-                        scale: Tween<double>(begin: 0.92, end: 1).animate(animation),
+                        scale: Tween<double>(
+                          begin: 0.92,
+                          end: 1,
+                        ).animate(animation),
                         child: child,
                       ),
                     );

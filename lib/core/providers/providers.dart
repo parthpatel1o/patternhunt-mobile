@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../api/api_client.dart';
 import '../constants/app_constants.dart';
 import '../models/models.dart';
@@ -54,7 +55,10 @@ class PatternQuery {
 
   @override
   bool operator ==(Object other) =>
-      other is PatternQuery && other.category == category && other.period == period && other.q == q;
+      other is PatternQuery &&
+      other.category == category &&
+      other.period == period &&
+      other.q == q;
 
   @override
   int get hashCode => Object.hash(category, period, q);
@@ -77,7 +81,10 @@ class PatternsNotifier extends FamilyAsyncNotifier<PatternsPage, PatternQuery> {
 
   Future<void> loadMore() async {
     final current = state.valueOrNull;
-    if (current == null || !current.hasMore || current.nextOffset == null || current.loadingMore) {
+    if (current == null ||
+        !current.hasMore ||
+        current.nextOffset == null ||
+        current.loadingMore) {
       return;
     }
 
@@ -85,7 +92,9 @@ class PatternsNotifier extends FamilyAsyncNotifier<PatternsPage, PatternQuery> {
     try {
       final next = await _fetch(arg, offset: current.nextOffset!);
       final seen = current.patterns.map((p) => p.id).toSet();
-      final appended = next.patterns.where((p) => !seen.contains(p.id)).toList();
+      final appended = next.patterns
+          .where((p) => !seen.contains(p.id))
+          .toList();
       state = AsyncData(
         PatternsPage(
           patterns: [...current.patterns, ...appended],
@@ -101,7 +110,11 @@ class PatternsNotifier extends FamilyAsyncNotifier<PatternsPage, PatternQuery> {
 
   /// Optimistic vote update + re-sort (matches web `PatternGrid.onVoteChange`).
   /// Search results keep relevance order and are not re-sorted.
-  void applyVote(String patternId, {required bool voted, required int voteCount}) {
+  void applyVote(
+    String patternId, {
+    required bool voted,
+    required int voteCount,
+  }) {
     final current = state.valueOrNull;
     if (current == null) return;
     final updated = [
@@ -123,24 +136,46 @@ class PatternsNotifier extends FamilyAsyncNotifier<PatternsPage, PatternQuery> {
 void sortPatternsByRank(List<PatternCard> patterns) {
   patterns.sort((a, b) {
     if (b.voteCount != a.voteCount) return b.voteCount.compareTo(a.voteCount);
-    final aCreated = DateTime.tryParse(a.createdAt)?.millisecondsSinceEpoch ?? 0;
-    final bCreated = DateTime.tryParse(b.createdAt)?.millisecondsSinceEpoch ?? 0;
+    final aCreated =
+        DateTime.tryParse(a.createdAt)?.millisecondsSinceEpoch ?? 0;
+    final bCreated =
+        DateTime.tryParse(b.createdAt)?.millisecondsSinceEpoch ?? 0;
     return bCreated.compareTo(aCreated);
   });
 }
 
 final patternsProvider =
-    AsyncNotifierProvider.family<PatternsNotifier, PatternsPage, PatternQuery>(PatternsNotifier.new);
+    AsyncNotifierProvider.family<PatternsNotifier, PatternsPage, PatternQuery>(
+      PatternsNotifier.new,
+    );
 
-final patternDetailProvider = FutureProvider.family<PatternCard, String>((ref, id) async {
+final patternDetailProvider = FutureProvider.family<PatternCard, String>((
+  ref,
+  id,
+) async {
   final api = ref.watch(apiClientProvider);
-  return api.getData('/patterns/$id', map: (json) => PatternCard.fromJson(json as Map<String, dynamic>));
+  return api.getData(
+    '/patterns/$id',
+    map: (json) => PatternCard.fromJson(json as Map<String, dynamic>),
+  );
 });
 
-final creatorProvider = FutureProvider.family<CreatorProfile, String>((ref, slug) async {
+final creatorProvider = FutureProvider.family<CreatorProfile, String>((
+  ref,
+  slug,
+) async {
   final api = ref.watch(apiClientProvider);
-  return api.getData('/creators/$slug', map: (json) => CreatorProfile.fromJson(json as Map<String, dynamic>));
+  return api.getData(
+    '/creators/$slug',
+    map: (json) => CreatorProfile.fromJson(json as Map<String, dynamic>),
+  );
 });
+
+int _defaultBoardFirst(String a, String b) {
+  if (a == kDefaultBoardName) return -1;
+  if (b == kDefaultBoardName) return 1;
+  return 0;
+}
 
 final boardsProvider = FutureProvider<List<BoardSummary>>((ref) async {
   final session = ref.watch(sessionProvider);
@@ -149,12 +184,18 @@ final boardsProvider = FutureProvider<List<BoardSummary>>((ref) async {
   return api.getData(
     '/boards',
     map: (json) {
-      return (json as List<dynamic>).map((e) => BoardSummary.fromJson(e as Map<String, dynamic>)).toList();
+      final boards = (json as List<dynamic>)
+          .map((e) => BoardSummary.fromJson(e as Map<String, dynamic>))
+          .toList();
+      boards.sort((a, b) => _defaultBoardFirst(a.name, b.name));
+      return boards;
     },
   );
 });
 
-final boardsWithPatternsProvider = FutureProvider<List<BoardWithPatterns>>((ref) async {
+final boardsWithPatternsProvider = FutureProvider<List<BoardWithPatterns>>((
+  ref,
+) async {
   final session = ref.watch(sessionProvider);
   if (session == null) return [];
   final api = ref.watch(apiClientProvider);
@@ -162,7 +203,11 @@ final boardsWithPatternsProvider = FutureProvider<List<BoardWithPatterns>>((ref)
     '/boards',
     query: {'withPatterns': 'true'},
     map: (json) {
-      return (json as List<dynamic>).map((e) => BoardWithPatterns.fromJson(e as Map<String, dynamic>)).toList();
+      final groups = (json as List<dynamic>)
+          .map((e) => BoardWithPatterns.fromJson(e as Map<String, dynamic>))
+          .toList();
+      groups.sort((a, b) => _defaultBoardFirst(a.board.name, b.board.name));
+      return groups;
     },
   );
 });
@@ -174,7 +219,9 @@ final myPatternsProvider = FutureProvider<List<PatternCard>>((ref) async {
   return api.getData(
     '/me/patterns',
     map: (json) {
-      return (json as List<dynamic>).map((e) => PatternCard.fromJson(e as Map<String, dynamic>)).toList();
+      return (json as List<dynamic>)
+          .map((e) => PatternCard.fromJson(e as Map<String, dynamic>))
+          .toList();
     },
   );
 });
@@ -189,8 +236,30 @@ final insightsProvider = FutureProvider<DesignerInsights>((ref) async {
   );
 });
 
+final boardSaveOptionsProvider =
+    FutureProvider.family<List<BoardSaveOption>, String>((
+      ref,
+      patternId,
+    ) async {
+      final session = ref.watch(sessionProvider);
+      if (session == null) return [];
+      final api = ref.watch(apiClientProvider);
+      return api.getData(
+        '/patterns/$patternId/save',
+        map: (json) => (json as List<dynamic>)
+            .map((e) => BoardSaveOption.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+    });
+
+void prefetchBoardSaveOptions(WidgetRef ref, String patternId) {
+  if (ref.read(sessionProvider) == null) return;
+  ref.read(boardSaveOptionsProvider(patternId));
+}
+
 void invalidatePatternSaveState(WidgetRef ref, String patternId) {
   ref.invalidate(patternDetailProvider(patternId));
   ref.invalidate(boardsWithPatternsProvider);
   ref.invalidate(boardsProvider);
+  ref.invalidate(boardSaveOptionsProvider(patternId));
 }

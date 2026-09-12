@@ -9,6 +9,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../../core/analytics/analytics.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/login_redirect.dart';
@@ -38,12 +39,16 @@ class PatternCardWidget extends ConsumerStatefulWidget {
   final int rank;
   final String rankPeriod;
   final bool showRank;
+
   /// Brief outline + shake after publish. Fades out on its own.
   final bool highlight;
+
   /// Fade/slide used on the normal board. Off while scrolling a new pattern into place.
   final bool animateEntrance;
+
   /// Rank board: notify parent so it can re-sort (web `VoteButton` → `PatternGrid`).
-  final void Function(String patternId, bool voted, int voteCount)? onVoteChange;
+  final void Function(String patternId, bool voted, int voteCount)?
+  onVoteChange;
 
   @override
   ConsumerState<PatternCardWidget> createState() => _PatternCardWidgetState();
@@ -120,7 +125,8 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
 
   bool get _onPodium => widget.showRank && widget.rank <= 3;
 
-  (Color bg, Color border, double borderWidth, List<BoxShadow> shadows) _rankStyle() {
+  (Color bg, Color border, double borderWidth, List<BoxShadow> shadows)
+  _rankStyle() {
     // Matches web globals.css --shadow / --shadow-rank-* tokens.
     if (!widget.showRank) {
       return (
@@ -128,48 +134,98 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
         AppColors.border,
         1,
         const [
-          BoxShadow(color: Color(0x383D2F4A), blurRadius: 20, spreadRadius: -6, offset: Offset(0, 6)),
-          BoxShadow(color: Color(0x143D2F4A), blurRadius: 6, spreadRadius: -2, offset: Offset(0, 2)),
+          BoxShadow(
+            color: Color(0x383D2F4A),
+            blurRadius: 20,
+            spreadRadius: -6,
+            offset: Offset(0, 6),
+          ),
+          BoxShadow(
+            color: Color(0x143D2F4A),
+            blurRadius: 6,
+            spreadRadius: -2,
+            offset: Offset(0, 2),
+          ),
         ],
       );
     }
     return switch (widget.rank) {
       1 => (
-          AppColors.rank1Bg,
-          AppColors.rank1Border,
-          2,
-          const [
-            BoxShadow(color: Color(0x663D2F4A), blurRadius: 32, spreadRadius: -8, offset: Offset(0, 12)),
-            BoxShadow(color: Color(0x2E3D2F4A), blurRadius: 12, spreadRadius: -3, offset: Offset(0, 4)),
-          ],
-        ),
+        AppColors.rank1Bg,
+        AppColors.rank1Border,
+        2,
+        const [
+          BoxShadow(
+            color: Color(0x663D2F4A),
+            blurRadius: 32,
+            spreadRadius: -8,
+            offset: Offset(0, 12),
+          ),
+          BoxShadow(
+            color: Color(0x2E3D2F4A),
+            blurRadius: 12,
+            spreadRadius: -3,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
       2 => (
-          AppColors.rank2Bg,
-          AppColors.rank2Border,
-          2,
-          const [
-            BoxShadow(color: Color(0x573D2F4A), blurRadius: 28, spreadRadius: -8, offset: Offset(0, 10)),
-            BoxShadow(color: Color(0x243D2F4A), blurRadius: 10, spreadRadius: -3, offset: Offset(0, 3)),
-          ],
-        ),
+        AppColors.rank2Bg,
+        AppColors.rank2Border,
+        2,
+        const [
+          BoxShadow(
+            color: Color(0x573D2F4A),
+            blurRadius: 28,
+            spreadRadius: -8,
+            offset: Offset(0, 10),
+          ),
+          BoxShadow(
+            color: Color(0x243D2F4A),
+            blurRadius: 10,
+            spreadRadius: -3,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
       3 => (
-          AppColors.rank3Bg,
-          AppColors.rank3Border,
-          1,
-          const [
-            BoxShadow(color: Color(0x473D2F4A), blurRadius: 24, spreadRadius: -7, offset: Offset(0, 8)),
-            BoxShadow(color: Color(0x1F3D2F4A), blurRadius: 8, spreadRadius: -2, offset: Offset(0, 3)),
-          ],
-        ),
+        AppColors.rank3Bg,
+        AppColors.rank3Border,
+        1,
+        const [
+          BoxShadow(
+            color: Color(0x473D2F4A),
+            blurRadius: 24,
+            spreadRadius: -7,
+            offset: Offset(0, 8),
+          ),
+          BoxShadow(
+            color: Color(0x1F3D2F4A),
+            blurRadius: 8,
+            spreadRadius: -2,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
       _ => (
-          AppColors.card,
-          AppColors.border,
-          1,
-          const [
-            BoxShadow(color: Color(0x383D2F4A), blurRadius: 20, spreadRadius: -6, offset: Offset(0, 6)),
-            BoxShadow(color: Color(0x143D2F4A), blurRadius: 6, spreadRadius: -2, offset: Offset(0, 2)),
-          ],
-        ),
+        AppColors.card,
+        AppColors.border,
+        1,
+        const [
+          BoxShadow(
+            color: Color(0x383D2F4A),
+            blurRadius: 20,
+            spreadRadius: -6,
+            offset: Offset(0, 6),
+          ),
+          BoxShadow(
+            color: Color(0x143D2F4A),
+            blurRadius: 6,
+            spreadRadius: -2,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
     };
   }
 
@@ -191,7 +247,10 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
 
   (Color bg, Color fg) _pricePillColors() {
     if (_onPodium) {
-      return (AppColors.card, widget.pattern.isFree ? AppColors.accent : AppColors.foreground);
+      return (
+        AppColors.card,
+        widget.pattern.isFree ? AppColors.accent : AppColors.foreground,
+      );
     }
     return (
       AppColors.primary.withValues(alpha: widget.pattern.isFree ? 0.2 : 0.3),
@@ -215,7 +274,10 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
     setState(() => _voting = true);
     try {
       final api = ref.read(apiClientProvider);
-      final result = await api.post('/patterns/${widget.pattern.id}/vote', query: _voteQuery);
+      final result = await api.post(
+        '/patterns/${widget.pattern.id}/vote',
+        query: _voteQuery,
+      );
       final voted = result['voted'] as bool?;
       final voteCount = result['voteCount'] as num?;
       if (voted != null && voteCount != null && mounted) {
@@ -224,7 +286,8 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
     } on ApiException catch (e) {
       if (mounted) {
         _applyVoteLocal(previousVoted, previousCount);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
       }
     } finally {
       if (mounted) setState(() => _voting = false);
@@ -254,25 +317,23 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
       final api = ref.read(apiClientProvider);
       if (_saved) {
         setState(() => _saved = false);
+        if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
         await api.delete('/patterns/${widget.pattern.id}/save');
       } else {
         setState(() => _saved = true);
         if (mounted) {
-          showAppSnackBar(
-            context,
-            message: 'Saved',
-            actionLabel: 'Move',
-            onAction: _openSaveSheet,
-          );
+          showSavedSnackBar(context, onAddToFolder: _openSaveSheet);
         }
         await api.post('/patterns/${widget.pattern.id}/save');
       }
       invalidatePatternSaveState(ref, widget.pattern.id);
+      if (_saved) prefetchBoardSaveOptions(ref, widget.pattern.id);
     } on ApiException catch (e) {
       if (mounted) {
         setState(() => _saved = previous);
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -293,13 +354,16 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
       try {
         Analytics.trackPatternCta(api, pattern.id, 'pdf');
         final result = await api.getData(
-              '/patterns/${pattern.id}/pdf',
-              map: (j) => j as Map<String, dynamic>,
-            );
+          '/patterns/${pattern.id}/pdf',
+          map: (j) => j as Map<String, dynamic>,
+        );
         final url = result['url'] as String?;
-        if (url != null) await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        if (url != null)
+          await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       } on ApiException catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        if (mounted)
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(e.message)));
       } finally {
         if (mounted) setState(() => _ctaLoading = false);
       }
@@ -344,205 +408,289 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          _withHighlight(LayoutBuilder(
-            builder: (context, constraints) {
-              // Outer height from outer width. Do not size Row children to this
-              // value — BoxDecoration.border insets the child, so fixed half×half
-              // children overflow by ~2×borderWidth.
-              final height = constraints.maxWidth / 2;
-              return SizedBox(
-                height: height,
-                child: GestureDetector(
-                  onTap: _openGallery,
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    // Border + shadow on the outer shell so the frame is visible
-                    // immediately (before images load) and isn’t covered by content.
-                    decoration: BoxDecoration(
-                      color: bg,
-                      borderRadius: radius,
-                      border: Border.all(color: border, width: borderWidth),
-                      boxShadow: shadows,
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(
-                        (16 - borderWidth).clamp(0, 16),
+          _withHighlight(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                // Outer height from outer width. Do not size Row children to this
+                // value — BoxDecoration.border insets the child, so fixed half×half
+                // children overflow by ~2×borderWidth.
+                final height = constraints.maxWidth / 2;
+                return SizedBox(
+                  height: height,
+                  child: GestureDetector(
+                    onTap: _openGallery,
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      // Border + shadow on the outer shell so the frame is visible
+                      // immediately (before images load) and isn’t covered by content.
+                      decoration: BoxDecoration(
+                        color: bg,
+                        borderRadius: radius,
+                        border: Border.all(color: border, width: borderWidth),
+                        boxShadow: shadows,
                       ),
-                      child: Row(
-                        children: [
-                          // Square pane from inner height so border inset can't
-                          // make the gallery slightly wider than tall.
-                          AspectRatio(
-                            aspectRatio: 1,
-                            child: _buildGallery(images, bg),
-                          ),
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Align(
-                                      alignment: Alignment.topLeft,
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            pattern.title,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 15,
-                                              height: 1.2,
-                                              color: AppColors.foreground,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          GestureDetector(
-                                            behavior: HitTestBehavior.translucent,
-                                            onTap: () => context.push(creatorPath(pattern.designerName)),
-                                            child: _ExpandHitTest(
-                                              vertical: 12,
-                                              child: SizedBox(
-                                                width: double.infinity,
-                                                child: Text(
-                                                  pattern.designerName,
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                                    fontWeight: FontWeight.w600,
-                                                    fontSize: 12,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(
+                          (16 - borderWidth).clamp(0, 16),
+                        ),
+                        child: Row(
+                          children: [
+                            // Square pane from inner height so border inset can't
+                            // make the gallery slightly wider than tall.
+                            AspectRatio(
+                              aspectRatio: 1,
+                              child: _buildGallery(images, bg),
+                            ),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  12,
+                                  10,
+                                  12,
+                                  10,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Align(
+                                        alignment: Alignment.topLeft,
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              pattern.title,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleSmall
+                                                  ?.copyWith(
+                                                    fontWeight: FontWeight.w700,
+                                                    fontSize: 15,
+                                                    height: 1.2,
                                                     color: AppColors.foreground,
-                                                    decoration: TextDecoration.underline,
-                                                    decorationColor: AppColors.foreground,
+                                                  ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            GestureDetector(
+                                              behavior:
+                                                  HitTestBehavior.translucent,
+                                              onTap: () => context.push(
+                                                creatorPath(
+                                                  pattern.designerName,
+                                                ),
+                                              ),
+                                              child: _ExpandHitTest(
+                                                vertical: 12,
+                                                child: SizedBox(
+                                                  width: double.infinity,
+                                                  child: Text(
+                                                    pattern.designerName,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .labelMedium
+                                                        ?.copyWith(
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          fontSize: 12,
+                                                          color: AppColors
+                                                              .foreground,
+                                                          decoration:
+                                                              TextDecoration
+                                                                  .underline,
+                                                          decorationColor:
+                                                              AppColors
+                                                                  .foreground,
+                                                        ),
                                                   ),
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: pillBg,
-                                              borderRadius: BorderRadius.circular(999),
-                                              boxShadow: _onPodium
-                                                  ? [
-                                                      BoxShadow(
-                                                        color: AppColors.accent.withValues(alpha: 0.08),
-                                                        blurRadius: 6,
-                                                        offset: const Offset(0, 1),
-                                                      ),
-                                                    ]
-                                                  : null,
+                                            const SizedBox(height: 4),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 2,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: pillBg,
+                                                borderRadius:
+                                                    BorderRadius.circular(999),
+                                                boxShadow: _onPodium
+                                                    ? [
+                                                        BoxShadow(
+                                                          color: AppColors
+                                                              .accent
+                                                              .withValues(
+                                                                alpha: 0.08,
+                                                              ),
+                                                          blurRadius: 6,
+                                                          offset: const Offset(
+                                                            0,
+                                                            1,
+                                                          ),
+                                                        ),
+                                                      ]
+                                                    : null,
+                                              ),
+                                              child: Text(
+                                                pattern.isFree
+                                                    ? 'Free'
+                                                    : 'Paid',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: pillFg,
+                                                ),
+                                              ),
                                             ),
-                                            child: Text(
-                                              pattern.isFree ? 'Free' : 'Paid',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w700,
-                                                color: pillFg,
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child:
+                                              SizedBox(
+                                                    height: 36,
+                                                    child: OutlinedButton(
+                                                      onPressed: _toggleVote,
+                                                      style: OutlinedButton.styleFrom(
+                                                        backgroundColor: voteBg,
+                                                        foregroundColor: voteFg,
+                                                        disabledBackgroundColor:
+                                                            voteBg,
+                                                        disabledForegroundColor:
+                                                            voteFg,
+                                                        side: BorderSide(
+                                                          color: voteBorder,
+                                                        ),
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 8,
+                                                            ),
+                                                        shape:
+                                                            const StadiumBorder(),
+                                                        textStyle:
+                                                            const TextStyle(
+                                                              fontSize: 12,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                            ),
+                                                      ),
+                                                      child: Row(
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .center,
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          ArrowBigUpIcon(
+                                                            size: 20,
+                                                            color: voteFg,
+                                                            filled: _voted,
+                                                          ),
+                                                          const SizedBox(
+                                                            width: 2,
+                                                          ),
+                                                          Text(
+                                                            '$_voteCount',
+                                                            style: TextStyle(
+                                                              color: voteFg,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  )
+                                                  .animate(
+                                                    target: _voted ? 1 : 0,
+                                                  )
+                                                  .scale(
+                                                    begin: const Offset(1, 1),
+                                                    end: const Offset(
+                                                      1.06,
+                                                      1.06,
+                                                    ),
+                                                    duration: 280.ms,
+                                                  ),
+                                        ),
+                                        if (showDownload || showView) ...[
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: SizedBox(
+                                              height: 36,
+                                              child: FilledButton(
+                                                onPressed: _ctaLoading
+                                                    ? null
+                                                    : _onCta,
+                                                style: FilledButton.styleFrom(
+                                                  backgroundColor:
+                                                      AppColors.accent,
+                                                  foregroundColor: AppColors
+                                                      .accentForeground,
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 10,
+                                                      ),
+                                                  shape: const StadiumBorder(),
+                                                  textStyle: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  _ctaLoading
+                                                      ? '…'
+                                                      : showDownload
+                                                      ? 'Download'
+                                                      : 'View',
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ],
-                                      ),
-                                    ),
-                                  ),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: SizedBox(
-                                          height: 36,
-                                          child: OutlinedButton(
-                                            onPressed: _toggleVote,
-                                            style: OutlinedButton.styleFrom(
-                                              backgroundColor: voteBg,
-                                              foregroundColor: voteFg,
-                                              disabledBackgroundColor: voteBg,
-                                              disabledForegroundColor: voteFg,
-                                              side: BorderSide(color: voteBorder),
-                                              padding: const EdgeInsets.symmetric(horizontal: 8),
-                                              shape: const StadiumBorder(),
-                                              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                                            ),
-                                            child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                ArrowBigUpIcon(
-                                                  size: 20,
-                                                  color: voteFg,
-                                                  filled: _voted,
-                                                ),
-                                                const SizedBox(width: 2),
-                                                Text(
-                                                  '$_voteCount',
-                                                  style: TextStyle(color: voteFg),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ).animate(target: _voted ? 1 : 0).scale(
-                                              begin: const Offset(1, 1),
-                                              end: const Offset(1.06, 1.06),
-                                              duration: 280.ms,
-                                            ),
-                                      ),
-                                      if (showDownload || showView) ...[
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: SizedBox(
-                                            height: 36,
-                                            child: FilledButton(
-                                              onPressed: _ctaLoading ? null : _onCta,
-                                              style: FilledButton.styleFrom(
-                                                backgroundColor: AppColors.accent,
-                                                foregroundColor: AppColors.accentForeground,
-                                                padding: const EdgeInsets.symmetric(horizontal: 10),
-                                                shape: const StadiumBorder(),
-                                                textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                                              ),
-                                              child: Text(
-                                                _ctaLoading
-                                                    ? '…'
-                                                    : showDownload
-                                                        ? 'Download'
-                                                        : 'View',
-                                              ),
-                                            ),
-                                          ),
-                                        ),
                                       ],
-                                    ],
-                                  ),
-                                ],
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              );
-            },
-          )),
+                );
+              },
+            ),
+          ),
           if (widget.showRank)
             Positioned(
               left: -6,
               top: -14,
               child: IgnorePointer(
                 child: Container(
-                  constraints: const BoxConstraints(minWidth: 40, minHeight: 36),
+                  constraints: const BoxConstraints(
+                    minWidth: 40,
+                    minHeight: 36,
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   decoration: BoxDecoration(
                     color: badgeBg,
                     borderRadius: BorderRadius.circular(999),
-                    border: widget.rank > 3 ? Border.all(color: AppColors.border) : null,
+                    border: widget.rank > 3
+                        ? Border.all(color: AppColors.border)
+                        : null,
                     boxShadow: [
                       BoxShadow(
                         color: AppColors.accent.withValues(alpha: 0.12),
@@ -577,7 +725,12 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
         fit: StackFit.expand,
         children: [
           if (images.isEmpty)
-            const Center(child: Text('No image', style: TextStyle(color: AppColors.muted, fontSize: 12)))
+            const Center(
+              child: Text(
+                'No image',
+                style: TextStyle(color: AppColors.muted, fontSize: 12),
+              ),
+            )
           else
             PageView.builder(
               controller: _imageController,
@@ -592,10 +745,11 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
               },
             ),
           Positioned(
-            right: 8,
-            top: 8,
+            right: -2,
+            top: -2,
             child: _GlassCircleButton(
               size: 30,
+              hitSlop: 10,
               backgroundAlpha: 0.45,
               blurSigma: 4,
               onTap: _saving ? null : _toggleSave,
@@ -752,11 +906,15 @@ class _GlassCircleButton extends StatelessWidget {
     required this.backgroundAlpha,
     required this.blurSigma,
     required this.child,
+    this.hitSlop = 0,
     this.onTap,
     this.onLongPress,
   });
 
   final double size;
+
+  /// Extra tappable padding on each side. Does not change the visible circle.
+  final double hitSlop;
   final double backgroundAlpha;
   final double blurSigma;
   final Widget child;
@@ -765,22 +923,28 @@ class _GlassCircleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipOval(
+    final visual = ClipOval(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-        child: Material(
+        child: ColoredBox(
           color: AppColors.card.withValues(alpha: backgroundAlpha),
-          child: InkWell(
-            onTap: onTap,
-            onLongPress: onLongPress,
-            customBorder: const CircleBorder(),
-            child: SizedBox(
-              width: size,
-              height: size,
-              child: Center(child: child),
-            ),
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Center(child: child),
           ),
         ),
+      ),
+    );
+
+    return SizedBox(
+      width: size + hitSlop * 2,
+      height: size + hitSlop * 2,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Center(child: visual),
       ),
     );
   }
@@ -788,10 +952,8 @@ class _GlassCircleButton extends StatelessWidget {
 
 /// Expands hit-testing beyond the child's layout size without changing layout.
 class _ExpandHitTest extends SingleChildRenderObjectWidget {
-  const _ExpandHitTest({
-    required this.vertical,
-    required Widget child,
-  }) : super(child: child);
+  const _ExpandHitTest({required this.vertical, required Widget child})
+    : super(child: child);
 
   final double vertical;
 

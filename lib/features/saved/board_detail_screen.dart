@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../core/api/api_client.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
@@ -39,6 +41,7 @@ class BoardDetailScreen extends ConsumerWidget {
 
         final board = group.board;
         final patterns = group.patterns;
+        final isDefaultFolder = board.name == kDefaultBoardName;
         final countLabel = patterns.length == 1
             ? '1 pattern in this folder'
             : '${patterns.length} patterns in this folder';
@@ -61,7 +64,10 @@ class BoardDetailScreen extends ConsumerWidget {
                         children: [
                           TextButton.icon(
                             onPressed: () => context.pop(),
-                            icon: const Icon(Icons.arrow_back_rounded, size: 22),
+                            icon: const Icon(
+                              Icons.arrow_back_rounded,
+                              size: 22,
+                            ),
                             label: const Text('All folders'),
                             style: TextButton.styleFrom(
                               foregroundColor: AppColors.muted,
@@ -94,59 +100,63 @@ class BoardDetailScreen extends ConsumerWidget {
                                       ),
                                 ),
                               ),
-                              OutlinedButton(
-                                onPressed: () => showRenameFolderDialog(
-                                  context,
-                                  ref,
-                                  boardId: board.id,
-                                  currentName: board.name,
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppColors.muted,
-                                  side: const BorderSide(color: AppColors.border),
-                                  shape: const StadiumBorder(),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
+                              if (!isDefaultFolder) ...[
+                                OutlinedButton(
+                                  onPressed: () => showRenameFolderDialog(
+                                    context,
+                                    ref,
+                                    boardId: board.id,
+                                    currentName: board.name,
                                   ),
-                                  textStyle: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.muted,
+                                    side: const BorderSide(
+                                      color: AppColors.border,
+                                    ),
+                                    shape: const StadiumBorder(),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    textStyle: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
                                   ),
+                                  child: const Text('Rename'),
                                 ),
-                                child: const Text('Rename'),
-                              ),
-                              const SizedBox(width: 8),
-                              OutlinedButton(
-                                onPressed: () => _deleteBoard(
-                                  context,
-                                  ref,
-                                  board.id,
-                                  board.name,
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppColors.muted,
-                                  side: const BorderSide(color: AppColors.border),
-                                  shape: const StadiumBorder(),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
+                                const SizedBox(width: 8),
+                                OutlinedButton(
+                                  onPressed: () => _deleteBoard(
+                                    context,
+                                    ref,
+                                    board.id,
+                                    board.name,
                                   ),
-                                  textStyle: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.muted,
+                                    side: const BorderSide(
+                                      color: AppColors.border,
+                                    ),
+                                    shape: const StadiumBorder(),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    textStyle: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
                                   ),
+                                  child: const Text('Delete'),
                                 ),
-                                child: const Text('Delete'),
-                              ),
+                              ],
                             ],
                           ),
                           const SizedBox(height: 4),
                           Text(
                             countLabel,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
+                            style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(color: AppColors.muted),
                           ),
                           const SizedBox(height: 24),
@@ -162,8 +172,9 @@ class BoardDetailScreen extends ConsumerWidget {
                       child: AppEmptyState(
                         emoji: '📁',
                         title: 'This folder is empty',
-                        description:
-                            'Bookmark a pattern and save it to “${board.name}”.',
+                        description: isDefaultFolder
+                            ? 'Bookmark a pattern to save it here.'
+                            : 'Bookmark a pattern and save it to “${board.name}”.',
                         action: EmptyStatePillButton(
                           label: 'Browse the rank board',
                           filled: true,
@@ -176,20 +187,17 @@ class BoardDetailScreen extends ConsumerWidget {
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
                     sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final pattern = patterns[index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 24),
-                            child: PatternCardWidget(
-                              pattern: pattern,
-                              rank: index + 1,
-                              showRank: false,
-                            ),
-                          );
-                        },
-                        childCount: patterns.length,
-                      ),
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final pattern = patterns[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 24),
+                          child: PatternCardWidget(
+                            pattern: pattern,
+                            rank: index + 1,
+                            showRank: false,
+                          ),
+                        );
+                      }, childCount: patterns.length),
                     ),
                   ),
               ],
@@ -213,12 +221,14 @@ class BoardDetailScreen extends ConsumerWidget {
         content: Text('Are you sure you want to delete $name folder?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
-                backgroundColor: AppColors.destructive),
+              backgroundColor: AppColors.destructive,
+            ),
             child: const Text('Delete'),
           ),
         ],

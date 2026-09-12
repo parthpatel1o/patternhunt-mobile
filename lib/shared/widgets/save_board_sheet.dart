@@ -1,35 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../core/api/api_client.dart';
 import '../../core/auth/login_redirect.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import 'app_snack_bar.dart';
+import 'skeleton_loader.dart';
 
-Future<void> showSaveBoardSheet(BuildContext context, WidgetRef ref, String patternId) async {
+Future<void> showSaveBoardSheet(
+  BuildContext context,
+  WidgetRef ref,
+  String patternId,
+) async {
   final session = ref.read(sessionProvider);
   if (session == null) {
     if (context.mounted) context.go(loginLocationFor(context));
     return;
   }
 
-  final api = ref.read(apiClientProvider);
-  List<BoardSaveOption> boards;
-  try {
-    boards = await api.getData(
-      '/patterns/$patternId/save',
-      map: (json) => (json as List<dynamic>)
-          .map((e) => BoardSaveOption.fromJson(e as Map<String, dynamic>))
-          .toList(),
-    );
-  } on ApiException catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-    }
-    return;
-  }
+  prefetchBoardSaveOptions(ref, patternId);
 
   if (!context.mounted) return;
 
@@ -40,7 +33,6 @@ Future<void> showSaveBoardSheet(BuildContext context, WidgetRef ref, String patt
     builder: (sheetContext) {
       return _SaveBoardSheetBody(
         patternId: patternId,
-        initialBoards: boards,
         onChanged: () => invalidatePatternSaveState(ref, patternId),
       );
     },
@@ -48,30 +40,19 @@ Future<void> showSaveBoardSheet(BuildContext context, WidgetRef ref, String patt
 }
 
 class _SaveBoardSheetBody extends ConsumerStatefulWidget {
-  const _SaveBoardSheetBody({
-    required this.patternId,
-    required this.initialBoards,
-    required this.onChanged,
-  });
+  const _SaveBoardSheetBody({required this.patternId, required this.onChanged});
 
   final String patternId;
-  final List<BoardSaveOption> initialBoards;
   final VoidCallback onChanged;
 
   @override
-  ConsumerState<_SaveBoardSheetBody> createState() => _SaveBoardSheetBodyState();
+  ConsumerState<_SaveBoardSheetBody> createState() =>
+      _SaveBoardSheetBodyState();
 }
 
 class _SaveBoardSheetBodyState extends ConsumerState<_SaveBoardSheetBody> {
-  late List<BoardSaveOption> _boards;
   final _newFolderController = TextEditingController();
   bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _boards = widget.initialBoards;
-  }
 
   @override
   void dispose() {
@@ -79,20 +60,25 @@ class _SaveBoardSheetBodyState extends ConsumerState<_SaveBoardSheetBody> {
     super.dispose();
   }
 
-  Future<void> _moveToBoard(BoardSaveOption board) async {
+  Future<void> _addToBoard(BoardSaveOption board) async {
     if (board.selected || _busy) return;
     setState(() => _busy = true);
     try {
       final api = ref.read(apiClientProvider);
-      await api.post('/patterns/${widget.patternId}/save', data: {'boardId': board.id});
+      final result = await api.post(
+        '/patterns/${widget.patternId}/save',
+        data: {'boardId': board.id},
+      );
       widget.onChanged();
       if (mounted) {
-        showAppSnackBar(context, message: 'Saved to ${board.name}');
+        final name = result['boardName'] as String? ?? board.name;
+        showAppSnackBar(context, message: 'Added to $name');
         Navigator.pop(context);
       }
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -102,22 +88,39 @@ class _SaveBoardSheetBodyState extends ConsumerState<_SaveBoardSheetBody> {
   Future<void> _createFolder() async {
     final name = _newFolderController.text.trim();
     if (name.isEmpty || _busy) return;
+    if (name.toLowerCase() == kDefaultBoardName.toLowerCase()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '“$kDefaultBoardName” is reserved for your default folder.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
     setState(() => _busy = true);
     try {
       final api = ref.read(apiClientProvider);
       final created = await api.post('/boards', data: {'name': name});
       final boardId = created['boardId'] as String?;
       if (boardId == null) throw ApiException('Could not create that folder.');
-      await api.post('/patterns/${widget.patternId}/save', data: {'boardId': boardId});
+      final saved = await api.post(
+        '/patterns/${widget.patternId}/save',
+        data: {'boardId': boardId},
+      );
       widget.onChanged();
       if (mounted) {
         _newFolderController.clear();
-        showAppSnackBar(context, message: 'Saved to $name');
+        final folderName = saved['boardName'] as String? ?? name;
+        showAppSnackBar(context, message: 'Added to $folderName');
         Navigator.pop(context);
       }
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -126,62 +129,141 @@ class _SaveBoardSheetBodyState extends ConsumerState<_SaveBoardSheetBody> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Text('Save to folder', style: Theme.of(context).textTheme.titleMedium),
-            ),
-            ..._boards.map(
-              (board) => ListTile(
-                leading: Icon(board.selected ? Icons.bookmark : Icons.bookmark_outline),
-                title: Text(board.name),
-                trailing: board.selected ? const Text('Current') : null,
-                enabled: !board.selected && !_busy,
-                onTap: board.selected ? null : () => _moveToBoard(board),
+    final boardsAsync = ref.watch(boardSaveOptionsProvider(widget.patternId));
+    final boards = boardsAsync.value;
+    final loading = boards == null;
+    final createEnabled = !loading && !_busy;
+    final media = MediaQuery.of(context);
+    final maxHeight = (media.size.height - media.viewInsets.bottom) * 0.85;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+      child: SafeArea(
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: Text(
+                  'Add to folder',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _newFolderController,
-                      enabled: !_busy,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.foreground,
-                      ),
-                      decoration: const InputDecoration(
-                        labelText: 'New folder',
-                        hintText: 'Folder name',
-                        hintStyle: TextStyle(
-                          color: AppColors.muted,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 15,
-                        ),
-                      ),
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => _createFolder(),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  'Choose a folder to add this pattern to',
+                  style: TextStyle(color: AppColors.muted, fontSize: 13),
+                ),
+              ),
+              if (boardsAsync.isLoading && boards == null)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  child: Column(
+                    children: [
+                      _FolderSkeleton(),
+                      SizedBox(height: 8),
+                      _FolderSkeleton(),
+                      SizedBox(height: 8),
+                      _FolderSkeleton(),
+                    ],
+                  ),
+                )
+              else if (boards == null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: Text(
+                    boardsAsync.hasError
+                        ? '${boardsAsync.error}'
+                        : 'Could not load folders.',
+                    style: const TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 13,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: _busy ? null : _createFolder,
-                    child: const Text('Create'),
+                )
+              else
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: boards.length,
+                    itemBuilder: (context, index) {
+                      final board = boards[index];
+                      return ListTile(
+                        leading: Icon(
+                          board.selected
+                              ? Icons.bookmark
+                              : Icons.bookmark_outline,
+                        ),
+                        title: Text(board.name),
+                        trailing: Text(
+                          board.selected ? 'Current' : 'Add',
+                          style: TextStyle(
+                            color: board.selected
+                                ? AppColors.muted
+                                : AppColors.accent,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        enabled: !board.selected && !_busy,
+                        onTap: board.selected ? null : () => _addToBoard(board),
+                      );
+                    },
                   ),
-                ],
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _newFolderController,
+                        enabled: createEnabled,
+                        maxLength: 40,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.foreground,
+                        ),
+                        decoration: const InputDecoration(
+                          counterText: '',
+                          hintText: 'New folder name',
+                          hintStyle: TextStyle(
+                            color: AppColors.muted,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 15,
+                          ),
+                        ),
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _createFolder(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: createEnabled ? _createFolder : null,
+                      child: const Text('Create'),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+}
+
+class _FolderSkeleton extends StatelessWidget {
+  const _FolderSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SkeletonBox(height: 44, borderRadius: 16);
   }
 }
