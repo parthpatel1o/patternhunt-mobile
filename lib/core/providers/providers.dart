@@ -29,7 +29,6 @@ final profileProvider = FutureProvider<UserProfile?>((ref) async {
   final api = ref.watch(apiClientProvider);
   return api.getData(
     '/me',
-    accessToken: session.accessToken,
     map: (json) => UserProfile.fromJson(json as Map<String, dynamic>),
   );
 });
@@ -44,10 +43,11 @@ class PatternQuery {
   Map<String, dynamic> toQuery({int offset = 0}) {
     final map = <String, dynamic>{
       'period': period,
+      // Always send category so "all" is not treated as the API default (amigurumi).
+      'category': (category == null || category == 'all') ? 'all' : category,
       'offset': offset,
       'limit': AppConstants.instance.scoreboardPageSize,
     };
-    if (category != null && category != 'all') map['category'] = category;
     if (q != null && q!.isNotEmpty) map['q'] = q;
     return map;
   }
@@ -98,6 +98,35 @@ class PatternsNotifier extends FamilyAsyncNotifier<PatternsPage, PatternQuery> {
       state = AsyncData(current.copyWith(loadingMore: false));
     }
   }
+
+  /// Optimistic vote update + re-sort (matches web `PatternGrid.onVoteChange`).
+  /// Search results keep relevance order and are not re-sorted.
+  void applyVote(String patternId, {required bool voted, required int voteCount}) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    final updated = [
+      for (final pattern in current.patterns)
+        if (pattern.id == patternId)
+          pattern.copyWith(voted: voted, voteCount: voteCount)
+        else
+          pattern,
+    ];
+    final isSearch = arg.q != null && arg.q!.isNotEmpty;
+    if (!isSearch) {
+      sortPatternsByRank(updated);
+    }
+    state = AsyncData(current.copyWith(patterns: updated));
+  }
+}
+
+/// Same ordering as web `sortByRank`: votes desc, then newer first.
+void sortPatternsByRank(List<PatternCard> patterns) {
+  patterns.sort((a, b) {
+    if (b.voteCount != a.voteCount) return b.voteCount.compareTo(a.voteCount);
+    final aCreated = DateTime.tryParse(a.createdAt)?.millisecondsSinceEpoch ?? 0;
+    final bCreated = DateTime.tryParse(b.createdAt)?.millisecondsSinceEpoch ?? 0;
+    return bCreated.compareTo(aCreated);
+  });
 }
 
 final patternsProvider =
@@ -119,7 +148,6 @@ final boardsProvider = FutureProvider<List<BoardSummary>>((ref) async {
   final api = ref.watch(apiClientProvider);
   return api.getData(
     '/boards',
-    accessToken: session.accessToken,
     map: (json) {
       return (json as List<dynamic>).map((e) => BoardSummary.fromJson(e as Map<String, dynamic>)).toList();
     },
@@ -133,7 +161,6 @@ final boardsWithPatternsProvider = FutureProvider<List<BoardWithPatterns>>((ref)
   return api.getData(
     '/boards',
     query: {'withPatterns': 'true'},
-    accessToken: session.accessToken,
     map: (json) {
       return (json as List<dynamic>).map((e) => BoardWithPatterns.fromJson(e as Map<String, dynamic>)).toList();
     },
@@ -146,7 +173,6 @@ final myPatternsProvider = FutureProvider<List<PatternCard>>((ref) async {
   final api = ref.watch(apiClientProvider);
   return api.getData(
     '/me/patterns',
-    accessToken: session.accessToken,
     map: (json) {
       return (json as List<dynamic>).map((e) => PatternCard.fromJson(e as Map<String, dynamic>)).toList();
     },
@@ -159,7 +185,6 @@ final insightsProvider = FutureProvider<DesignerInsights>((ref) async {
   final api = ref.watch(apiClientProvider);
   return api.getData(
     '/me/insights',
-    accessToken: session.accessToken,
     map: (json) => DesignerInsights.fromJson(json as Map<String, dynamic>),
   );
 });
@@ -168,5 +193,4 @@ void invalidatePatternSaveState(WidgetRef ref, String patternId) {
   ref.invalidate(patternDetailProvider(patternId));
   ref.invalidate(boardsWithPatternsProvider);
   ref.invalidate(boardsProvider);
-  ref.invalidate(patternsProvider);
 }

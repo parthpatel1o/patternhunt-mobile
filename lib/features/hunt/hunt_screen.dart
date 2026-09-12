@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/analytics/analytics.dart';
 import '../../core/api/api_client.dart';
+import '../../core/auth/login_redirect.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
@@ -1271,7 +1272,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     }
 
     if (ref.read(sessionProvider) == null) {
-      if (mounted) context.go('/profile');
+      if (mounted) context.go(loginLocationFor(context));
       return;
     }
     final oldVoted = _voted;
@@ -1300,7 +1301,6 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         });
       }
       onVoteChange?.call(patternId, voted, voteCount);
-      ref.invalidate(patternsProvider);
     } on ApiException catch (error) {
       if (mounted) {
         setState(() {
@@ -1334,7 +1334,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     }
 
     if (ref.read(sessionProvider) == null) {
-      if (mounted) context.go('/profile');
+      if (mounted) context.go(loginLocationFor(context));
       return;
     }
 
@@ -1368,7 +1368,6 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         });
       }
       onVoteChange?.call(patternId, voted, voteCount);
-      ref.invalidate(patternsProvider);
     } on ApiException catch (error) {
       if (mounted) {
         setState(() {
@@ -1386,7 +1385,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
   Future<void> _toggleSave() async {
     if (_saving) return;
     if (ref.read(sessionProvider) == null) {
-      if (mounted) context.go('/profile');
+      if (mounted) context.go(loginLocationFor(context));
       return;
     }
     final oldSaved = _saved;
@@ -1511,7 +1510,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         !_voted &&
         ref.read(sessionProvider) == null) {
       _snapBack();
-      if (mounted) context.go('/profile');
+      if (mounted) context.go(loginLocationFor(context));
       return;
     }
 

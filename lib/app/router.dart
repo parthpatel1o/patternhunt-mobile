@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/auth/login_redirect.dart';
 import '../../core/providers/providers.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/auth/reset_password_screen.dart';
@@ -85,7 +86,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           (['/submit', '/saved', '/mine', '/insights', '/settings'].contains(state.matchedLocation) ||
               state.matchedLocation.startsWith('/mine/') ||
               state.matchedLocation.startsWith('/saved/'))) {
-        return '/profile';
+        return loginLocation(next: state.uri.toString());
       }
       if (session != null &&
           (state.matchedLocation == '/insights' ||
@@ -98,7 +99,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         }
       }
       if (session != null && loggingIn && !recovery) {
-        final safeNext = _safeInternalPath(next);
+        final safeNext = safeInternalPath(next);
         return safeNext ?? '/';
       }
       return null;
@@ -218,7 +219,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: '/login',
                 pageBuilder: (context, state) => _fadePage(
                   key: state.pageKey,
-                  child: const LoginScreen(),
+                  child: LoginScreen(
+                    nextPath: state.uri.queryParameters['next'],
+                  ),
                 ),
               ),
             ],
@@ -255,12 +258,3 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.onDispose(router.dispose);
   return router;
 });
-
-/// Only allow in-app relative paths for post-login redirects.
-String? _safeInternalPath(String? next) {
-  if (next == null || next.isEmpty) return null;
-  final decoded = Uri.decodeComponent(next);
-  if (!decoded.startsWith('/') || decoded.startsWith('//')) return null;
-  if (decoded.startsWith('/login')) return null;
-  return decoded;
-}

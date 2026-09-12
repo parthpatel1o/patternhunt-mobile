@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
+import '../../core/auth/login_redirect.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
@@ -10,7 +11,7 @@ import 'app_snack_bar.dart';
 Future<void> showSaveBoardSheet(BuildContext context, WidgetRef ref, String patternId) async {
   final session = ref.read(sessionProvider);
   if (session == null) {
-    if (context.mounted) context.go('/profile');
+    if (context.mounted) context.go(loginLocationFor(context));
     return;
   }
 

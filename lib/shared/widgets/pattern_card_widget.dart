@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -10,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/analytics/analytics.dart';
 import '../../core/api/api_client.dart';
+import '../../core/auth/login_redirect.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
@@ -29,6 +31,7 @@ class PatternCardWidget extends ConsumerStatefulWidget {
     this.showRank = true,
     this.highlight = false,
     this.animateEntrance = true,
+    this.onVoteChange,
   });
 
   final PatternCard pattern;
@@ -39,6 +42,8 @@ class PatternCardWidget extends ConsumerStatefulWidget {
   final bool highlight;
   /// Fade/slide used on the normal board. Off while scrolling a new pattern into place.
   final bool animateEntrance;
+  /// Rank board: notify parent so it can re-sort (web `VoteButton` → `PatternGrid`).
+  final void Function(String patternId, bool voted, int voteCount)? onVoteChange;
 
   @override
   ConsumerState<PatternCardWidget> createState() => _PatternCardWidgetState();
@@ -74,11 +79,15 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
   @override
   void didUpdateWidget(PatternCardWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.pattern.id != widget.pattern.id ||
-        oldWidget.pattern.saved != widget.pattern.saved ||
-        oldWidget.pattern.voted != widget.pattern.voted ||
-        oldWidget.pattern.voteCount != widget.pattern.voteCount) {
+    // Match web VoteButton: never clobber an in-flight optimistic vote.
+    if (!_voting &&
+        (oldWidget.pattern.id != widget.pattern.id ||
+            oldWidget.pattern.saved != widget.pattern.saved ||
+            oldWidget.pattern.voted != widget.pattern.voted ||
+            oldWidget.pattern.voteCount != widget.pattern.voteCount)) {
       _syncFromPattern();
+    } else if (oldWidget.pattern.saved != widget.pattern.saved) {
+      _saved = widget.pattern.saved;
     }
     if (oldWidget.pattern.id != widget.pattern.id) {
       _imageIndex = 0;
@@ -193,35 +202,28 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
   Future<void> _toggleVote() async {
     if (_voting) return;
     if (ref.read(sessionProvider) == null) {
-      if (mounted) context.go('/profile');
+      if (mounted) context.go(loginLocationFor(context));
       return;
     }
     HapticFeedback.lightImpact();
     final previousVoted = _voted;
     final previousCount = _voteCount;
-    setState(() {
-      _voting = true;
-      _voted = !_voted;
-      _voteCount = (_voteCount + (_voted ? 1 : -1)).clamp(0, 1 << 30);
-    });
+    final nextVoted = !_voted;
+    final nextCount = (_voteCount + (nextVoted ? 1 : -1)).clamp(0, 1 << 30);
+    // Optimistic update + parent re-sort (web VoteButton.applyLocal).
+    _applyVoteLocal(nextVoted, nextCount);
+    setState(() => _voting = true);
     try {
       final api = ref.read(apiClientProvider);
       final result = await api.post('/patterns/${widget.pattern.id}/vote', query: _voteQuery);
       final voted = result['voted'] as bool?;
       final voteCount = result['voteCount'] as num?;
       if (voted != null && voteCount != null && mounted) {
-        setState(() {
-          _voted = voted;
-          _voteCount = voteCount.toInt();
-        });
+        _applyVoteLocal(voted, voteCount.toInt());
       }
-      ref.invalidate(patternsProvider);
     } on ApiException catch (e) {
       if (mounted) {
-        setState(() {
-          _voted = previousVoted;
-          _voteCount = previousCount;
-        });
+        _applyVoteLocal(previousVoted, previousCount);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } finally {
@@ -229,9 +231,21 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
     }
   }
 
+  void _applyVoteLocal(bool voted, int voteCount) {
+    setState(() {
+      _voted = voted;
+      _voteCount = voteCount;
+    });
+    // Defer parent re-sort so we don't setState an ancestor mid-child setState.
+    final notify = widget.onVoteChange;
+    if (notify == null) return;
+    final id = widget.pattern.id;
+    scheduleMicrotask(() => notify(id, voted, voteCount));
+  }
+
   Future<void> _toggleSave() async {
     if (ref.read(sessionProvider) == null) {
-      if (mounted) context.go('/profile');
+      if (mounted) context.go(loginLocationFor(context));
       return;
     }
     setState(() => _saving = true);

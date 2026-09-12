@@ -36,7 +36,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final profileAsync = ref.watch(profileProvider);
 
     if (session == null) {
-      return const LoginScreen();
+      return const LoginScreen(nextPath: '/profile');
     }
 
     return profileAsync.when(

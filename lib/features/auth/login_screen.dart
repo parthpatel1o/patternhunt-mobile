@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/auth/login_redirect.dart';
 import '../../core/auth/signup_welcome.dart';
 import '../../core/config/env.dart';
 import '../../core/providers/providers.dart';
@@ -81,6 +82,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
 
       if (_mode == _AuthMode.signup) {
+        if (_designer && _name.text.trim().length < 2) {
+          setState(() {
+            _loading = false;
+            _error = 'Enter your designer name (at least 2 characters).';
+          });
+          return;
+        }
         final email = _email.text.trim();
         final response = await auth.signUp(
           email: email,
@@ -127,8 +135,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } catch (_) {
       fromQuery = null;
     }
-    return _safeInternalPath(fromQuery) ??
-        _safeInternalPath(widget.nextPath) ??
+    return safeInternalPath(fromQuery) ??
+        safeInternalPath(widget.nextPath) ??
         '/';
   }
 
@@ -391,9 +399,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 8),
                   TextField(
                     controller: _name,
+                    maxLength: 80,
                     decoration: InputDecoration(
                       labelText: 'Designer name',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                      counterText: '',
                     ),
                   ),
                 ],
@@ -448,13 +458,4 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ),
     );
   }
-}
-
-/// Only allow in-app relative paths for post-login redirects.
-String? _safeInternalPath(String? next) {
-  if (next == null || next.isEmpty) return null;
-  final decoded = Uri.decodeComponent(next);
-  if (!decoded.startsWith('/') || decoded.startsWith('//')) return null;
-  if (decoded.startsWith('/login')) return null;
-  return decoded;
 }

@@ -579,7 +579,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             onClearSearch: _backToRankBoard,
           );
         }
-        return _patternColumn(page, showRank: !_isSearching, showSubmitInvite: !_isSearching);
+        return _patternColumn(
+          page,
+          showRank: !_isSearching,
+          showSubmitInvite: !_isSearching,
+          boardQuery: query,
+          reorderOnVote: !_isSearching,
+        );
       },
     );
   }
@@ -596,7 +602,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ],
       );
     }
-    return _patternColumn(_focusedPage!, showRank: true, animateEntrance: false, showSubmitInvite: true);
+    return _patternColumn(
+      _focusedPage!,
+      showRank: true,
+      animateEntrance: false,
+      showSubmitInvite: true,
+      reorderOnVote: true,
+    );
+  }
+
+  void _applyFocusedVote(String patternId, {required bool voted, required int voteCount}) {
+    final page = _focusedPage;
+    if (page == null) return;
+    final updated = [
+      for (final pattern in page.patterns)
+        if (pattern.id == patternId)
+          pattern.copyWith(voted: voted, voteCount: voteCount)
+        else
+          pattern,
+    ];
+    sortPatternsByRank(updated);
+    setState(() => _focusedPage = page.copyWith(patterns: updated));
   }
 
   Widget _patternColumn(
@@ -604,6 +630,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required bool showRank,
     bool animateEntrance = true,
     bool showSubmitInvite = false,
+    PatternQuery? boardQuery,
+    bool reorderOnVote = false,
   }) {
     return Column(
       children: [
@@ -616,6 +644,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             showRank: showRank,
             animateEntrance: animateEntrance,
             highlight: _showFocusEffect && page.patterns[i].id == _focusId,
+            onVoteChange: reorderOnVote
+                ? (patternId, voted, voteCount) {
+                    if (_rankFocusMode) {
+                      _applyFocusedVote(patternId, voted: voted, voteCount: voteCount);
+                    } else if (boardQuery != null) {
+                      ref.read(patternsProvider(boardQuery).notifier).applyVote(
+                            patternId,
+                            voted: voted,
+                            voteCount: voteCount,
+                          );
+                    }
+                  }
+                : null,
           ),
           const SizedBox(height: 12),
         ],
