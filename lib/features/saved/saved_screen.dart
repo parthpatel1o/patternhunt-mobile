@@ -2,9 +2,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 import '../../shared/widgets/app_empty_state.dart';
 
 class SavedScreen extends ConsumerWidget {
@@ -18,53 +20,53 @@ class SavedScreen extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('$e')),
       data: (groups) {
-        return RefreshIndicator(
-          color: AppColors.accent,
-          onRefresh: () async => ref.invalidate(boardsWithPatternsProvider),
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              if (groups.isEmpty)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
-                    child: AppEmptyState(
-                      emoji: '📁',
-                      title: 'No folders yet',
-                      description:
-                          'Bookmark patterns from the rank board, or create folders here to organize them.',
-                      action: EmptyStatePillButton(
-                        label: 'Browse the rank board',
-                        filled: false,
-                        onPressed: () => context.go('/'),
+        // Dissolves in once when the spinner hands over, not on every rebuild.
+        return AppEnter(
+          rise: 4,
+          child: RefreshIndicator(
+            color: AppColors.accent,
+            onRefresh: () async => ref.invalidate(boardsWithPatternsProvider),
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                if (groups.isEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
+                      child: AppEmptyState(
+                        emoji: '📁',
+                        title: 'No folders yet',
+                        description: 'Bookmark patterns from the rank board, or create folders here to organize them.',
+                        action: EmptyStatePillButton(
+                          label: 'Browse the rank board',
+                          filled: false,
+                          onPressed: () => context.go('/'),
+                        ),
                       ),
                     ),
-                  ),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
-                  sliver: SliverGrid(
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 16,
-                      crossAxisSpacing: 16,
-                      childAspectRatio: 0.78,
-                    ),
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
+                    sliver: SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 16,
+                            crossAxisSpacing: 16,
+                            childAspectRatio: 0.78,
+                          ),
+                      delegate: SliverChildBuilderDelegate((context, index) {
                         final group = groups[index];
                         return _SavedFolderCard(
                           group: group,
                           onTap: () => context.push('/saved/${group.board.id}'),
                         );
-                      },
-                      childCount: groups.length,
+                      }, childCount: groups.length),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -89,8 +91,9 @@ class _SavedFolderCard extends StatelessWidget {
         : '${group.patterns.length} patterns';
     final tabBorder = AppColors.primaryForeground.withValues(alpha: 0.35);
 
-    return GestureDetector(
+    return AppPressable(
       onTap: onTap,
+      haptic: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -104,8 +107,9 @@ class _SavedFolderCard extends StatelessWidget {
                 height: 14,
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.55),
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(8)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(8),
+                  ),
                   border: Border(
                     top: BorderSide(color: tabBorder),
                     left: BorderSide(color: tabBorder),
@@ -140,9 +144,7 @@ class _SavedFolderCard extends StatelessWidget {
                             ? Center(
                                 child: Text(
                                   'Empty folder',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelMedium
+                                  style: Theme.of(context).textTheme.labelMedium
                                       ?.copyWith(
                                         fontWeight: FontWeight.w600,
                                         color: AppColors.muted,
@@ -158,16 +160,12 @@ class _SavedFolderCard extends StatelessWidget {
                     group.board.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 20,
-                        ),
+                    style: Theme.of(context).textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w700, fontSize: 20),
                   ),
                   Text(
                     countLabel,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
+                    style: Theme.of(context).textTheme.bodySmall
                         ?.copyWith(color: AppColors.muted),
                   ),
                 ],
@@ -239,4 +237,3 @@ class _FolderMosaic extends StatelessWidget {
     );
   }
 }
-

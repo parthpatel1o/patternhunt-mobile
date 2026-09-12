@@ -5,12 +5,15 @@ import '../../core/api/api_client.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
+import '../../shared/widgets/app_snack_bar.dart';
 
 /// Shows the new-folder dialog and creates the board on confirm.
 Future<void> showCreateFolderDialog(BuildContext context, WidgetRef ref) async {
   final controller = TextEditingController();
   final name = await showDialog<String>(
     context: context,
+    animationStyle: AppMotion.surface,
     builder: (ctx) => Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       child: Padding(
@@ -91,12 +94,9 @@ Future<void> showCreateFolderDialog(BuildContext context, WidgetRef ref) async {
   if (name == null || name.isEmpty) return;
   if (name.toLowerCase() == kDefaultBoardName.toLowerCase()) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '“$kDefaultBoardName” is reserved for your default folder.',
-          ),
-        ),
+      showAppSnackBar(
+        context,
+        message: '“$kDefaultBoardName” is reserved for your default folder.',
       );
     }
     return;
@@ -106,13 +106,9 @@ Future<void> showCreateFolderDialog(BuildContext context, WidgetRef ref) async {
     ref.invalidate(boardsWithPatternsProvider);
     ref.invalidate(boardsProvider);
     if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Created “$name”')));
+      showAppSnackBar(context, message: 'Created “$name”');
     }
   } on ApiException catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
-    }
+    if (context.mounted) showAppSnackBar(context, message: e.message);
   }
 }

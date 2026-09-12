@@ -4,16 +4,21 @@ import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+
 import '../../core/api/api_client.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/images/square_crop.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/category_icons.dart';
+import '../../shared/widgets/app_snack_bar.dart';
+import '../../shared/widgets/pattern_option_chip.dart';
 import '../../shared/widgets/reorderable_photo_grid.dart';
 
 sealed class _EditPhoto {
@@ -48,6 +53,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
   bool _saving = false;
   bool _preparing = false;
   bool _isFree = false;
+  late String _category;
   bool _hasPdf = false;
   bool _coverNotSquare = false;
   String? _createdAt;
@@ -57,11 +63,13 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
   static const _tileSize = 112.0;
   static var _idCounter = 0;
 
-  static String _newId() => 'p-${DateTime.now().microsecondsSinceEpoch}-${_idCounter++}';
+  static String _newId() =>
+      'p-${DateTime.now().microsecondsSinceEpoch}-${_idCounter++}';
 
   @override
   void initState() {
     super.initState();
+    _category = AppConstants.instance.defaultRankBoardCategory;
     _load();
   }
 
@@ -103,6 +111,11 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
         _title.text = (data['title'] as String?) ?? '';
         _url.text = (data['patternUrl'] as String?) ?? '';
         _isFree = data['isFree'] == true;
+        final loadedCategory = data['categorySlug'] as String?;
+        final categories = AppConstants.instance.categories;
+        _category = categories.any((c) => c.slug == loadedCategory)
+            ? loadedCategory!
+            : AppConstants.instance.defaultRankBoardCategory;
         _hasPdf = data['hasPdf'] == true;
         _createdAt = data['createdAt'] as String?;
         _photos
@@ -168,7 +181,10 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
     final picker = ImagePicker();
     final List<XFile> picked;
     if (remaining == 1) {
-      final single = await picker.pickImage(source: ImageSource.gallery, imageQuality: 95);
+      final single = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 95,
+      );
       picked = single == null ? const [] : [single];
     } else {
       picked = await picker.pickMultiImage(imageQuality: 95, limit: remaining);
@@ -180,7 +196,9 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
     try {
       final prepared = <_NewPhoto>[];
       for (final xfile in picked.take(remaining)) {
-        prepared.add(_NewPhoto(id: _newId(), file: await _compress(File(xfile.path))));
+        prepared.add(
+          _NewPhoto(id: _newId(), file: await _compress(File(xfile.path))),
+        );
       }
       if (!mounted) return;
       setState(() => _photos.addAll(prepared));
@@ -193,7 +211,11 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
   }
 
   void _movePhoto(int from, int to) {
-    if (from == to || from < 0 || to < 0 || from >= _photos.length || to >= _photos.length) {
+    if (from == to ||
+        from < 0 ||
+        to < 0 ||
+        from >= _photos.length ||
+        to >= _photos.length) {
       return;
     }
     final coverChanged = from == 0 || to == 0;
@@ -232,8 +254,9 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
       });
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not crop that photo. Try re-adding it.')),
+        showAppSnackBar(
+          context,
+          message: 'Could not crop that photo. Try re-adding it.',
         );
       }
     }
@@ -281,12 +304,18 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
                 left: 6,
                 top: 6,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.card.withValues(alpha: 0.92),
                     borderRadius: BorderRadius.circular(999),
                   ),
-                  child: Text('Cover', style: Theme.of(context).textTheme.labelSmall),
+                  child: Text(
+                    'Cover',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
                 ),
               ),
             Positioned(
@@ -363,12 +392,17 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.add_photo_alternate_outlined, color: AppColors.accent, size: 26),
+                          const Icon(
+                            Icons.add_photo_alternate_outlined,
+                            color: AppColors.accent,
+                            size: 26,
+                          ),
                           const SizedBox(height: 4),
                           Text(
                             'Add photos',
                             textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.foreground,
                                 ),
@@ -376,7 +410,8 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
                           Text(
                             '$remaining remaining',
                             textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.muted),
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(color: AppColors.muted),
                           ),
                         ],
                       ),
@@ -401,13 +436,26 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
       ),
     );
     if (response.statusCode == null || response.statusCode! >= 300) {
-      throw ApiException('Upload failed (${response.statusCode ?? 'unknown'}).');
+      throw ApiException(
+        'Upload failed (${response.statusCode ?? 'unknown'}).',
+      );
     }
   }
 
   Future<void> _save() async {
+    final url = _url.text.trim();
     if (_photos.isEmpty) {
       setState(() => _error = 'Add at least one photo.');
+      return;
+    }
+    if (!_isFree && url.isEmpty) {
+      setState(() => _error = 'Paid patterns need an external pattern URL');
+      return;
+    }
+    if (_isFree && !_hasPdf && url.isEmpty) {
+      setState(
+        () => _error = 'Free patterns need a PDF or an external pattern URL',
+      );
       return;
     }
 
@@ -434,9 +482,10 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
       final newPhotos = _photos.whereType<_NewPhoto>().toList();
       final uploadedKeys = <String>[];
       if (newPhotos.isNotEmpty) {
-        final urls = await api.post('/me/patterns/${widget.patternId}/upload-urls', data: {
-          'imageCount': newPhotos.length,
-        });
+        final urls = await api.post(
+          '/me/patterns/${widget.patternId}/upload-urls',
+          data: {'imageCount': newPhotos.length},
+        );
         final slots = (urls['images'] as List<dynamic>? ?? [])
             .map((e) => e as Map<String, dynamic>)
             .toList();
@@ -463,13 +512,17 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
       await api.patch('/me/patterns/${widget.patternId}', {
         'title': _title.text.trim(),
         'patternUrl': _url.text.trim(),
+        'isFree': _isFree,
+        'categorySlug': _category,
         'imageKeys': imageKeys,
       });
 
       ref.invalidate(myPatternsProvider);
       ref.invalidate(patternsProvider);
+      ref.invalidate(patternDetailProvider(widget.patternId));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pattern updated')));
+        HapticFeedback.lightImpact();
+        showAppSnackBar(context, message: 'Pattern updated');
         context.pop();
       }
     } on ApiException catch (e) {
@@ -482,10 +535,9 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
   }
 
   String get _detailsHint {
-    final type = _isFree ? 'Free' : 'Paid';
     final created = _createdAt == null ? null : DateTime.tryParse(_createdAt!);
-    if (created == null) return type;
-    return '$type · Launched ${DateFormat('d MMM yyyy').format(created.toLocal())}';
+    if (created == null) return '';
+    return 'Launched ${DateFormat('d MMM yyyy').format(created.toLocal())}';
   }
 
   @override
@@ -506,7 +558,10 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
         ),
         filled: true,
         fillColor: AppColors.background,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.border),
@@ -525,7 +580,10 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
     Widget fieldLabel(String text) {
       return Text(
         text,
-        style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, fontSize: 14),
+        style: textTheme.bodyMedium?.copyWith(
+          fontWeight: FontWeight.w600,
+          fontSize: 14,
+        ),
       );
     }
 
@@ -538,7 +596,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
         children: [
           _EditSection(
             title: 'Details',
-            hint: _detailsHint,
+            hint: _detailsHint.isEmpty ? null : _detailsHint,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -549,11 +607,67 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
                   textCapitalization: TextCapitalization.sentences,
                   maxLength: 80,
                   enabled: !_saving,
-                  decoration: fieldDecoration('Tiny frog plushie').copyWith(counterText: ''),
+                  decoration: fieldDecoration('Tiny frog plushie')
+                      .copyWith(counterText: ''),
+                ),
+                const SizedBox(height: 16),
+                fieldLabel('Is this pattern free or paid?'),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: PatternOptionChip(
+                        selected: !_isFree,
+                        label: 'Paid',
+                        onTap: _saving
+                            ? null
+                            : () => setState(() => _isFree = false),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: PatternOptionChip(
+                        selected: _isFree,
+                        label: 'Free',
+                        onTap: _saving
+                            ? null
+                            : () => setState(() => _isFree = true),
+                      ),
+                    ),
+                  ],
+                ),
+                if (!_isFree && _hasPdf) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Saving as paid will remove the uploaded PDF.',
+                    style: textTheme.bodySmall?.copyWith(
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                fieldLabel('Category'),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final c in AppConstants.instance.categories)
+                      PatternOptionChip(
+                        selected: _category == c.slug,
+                        icon: categoryIcon(c.slug),
+                        label: c.name,
+                        onTap: _saving
+                            ? null
+                            : () => setState(() => _category = c.slug),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 fieldLabel(
-                  _isFree && _hasPdf ? 'Pattern URL (optional if you already have a PDF)' : 'Pattern URL',
+                  _isFree && _hasPdf
+                      ? 'Pattern URL (optional if you already have a PDF)'
+                      : 'Pattern URL',
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -585,7 +699,9 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
                   const SizedBox(height: 10),
                   Text(
                     'Your cover image needs to be a square image.',
-                    style: textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error),
+                    style: textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                 ],
               ],
@@ -610,7 +726,10 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
                   foregroundColor: AppColors.foreground,
                   side: const BorderSide(color: AppColors.border),
                   shape: const StadiumBorder(),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 14,
+                  ),
                 ),
                 child: const Text('Cancel'),
               ),
@@ -621,7 +740,9 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.accent,
                     foregroundColor: AppColors.accentForeground,
-                    disabledBackgroundColor: AppColors.accent.withValues(alpha: 0.6),
+                    disabledBackgroundColor: AppColors.accent.withValues(
+                      alpha: 0.6,
+                    ),
                     shape: const StadiumBorder(),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
@@ -637,11 +758,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
 }
 
 class _EditSection extends StatelessWidget {
-  const _EditSection({
-    required this.title,
-    required this.child,
-    this.hint,
-  });
+  const _EditSection({required this.title, required this.child, this.hint});
 
   final String title;
   final String? hint;
@@ -676,16 +793,15 @@ class _EditSection extends StatelessWidget {
         children: [
           Text(
             title,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 20,
-                ),
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.w700, fontSize: 20),
           ),
           if (hint != null) ...[
             const SizedBox(height: 4),
             Text(
               hint!,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: AppColors.muted),
             ),
           ],
           const SizedBox(height: 16),
@@ -709,7 +825,9 @@ class _DashedBorderPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     final path = Path()
-      ..addRRect(RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)));
+      ..addRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
+      );
     const dashWidth = 5.0;
     const dashSpace = 4.0;
     for (final metric in path.computeMetrics()) {

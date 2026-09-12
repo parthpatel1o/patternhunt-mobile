@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 
 class InsightsScreen extends ConsumerWidget {
   const InsightsScreen({super.key});
@@ -30,7 +32,8 @@ class InsightsScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               TextButton(
-                onPressed: () => context.canPop() ? context.pop() : context.go('/mine'),
+                onPressed: () =>
+                    context.canPop() ? context.pop() : context.go('/mine'),
                 child: const Text('Back to My patterns'),
               ),
             ],
@@ -38,74 +41,80 @@ class InsightsScreen extends ConsumerWidget {
         ),
       ),
       data: (insights) {
-        return RefreshIndicator(
-          color: AppColors.accent,
-          onRefresh: () async => ref.invalidate(insightsProvider),
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 88),
-            children: [
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final width = constraints.maxWidth;
-                  final tileWidth = (width - 8) / 2;
-                  return Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      SizedBox(
-                        width: tileWidth,
-                        child: _StatTile(
-                          label: 'Profile views',
-                          value: insights.profileViewCount,
-                          icon: Icons.visibility_outlined,
+        // Dissolves in once when the spinner hands over, not on every rebuild.
+        return AppEnter(
+          rise: 4,
+          child: RefreshIndicator(
+            color: AppColors.accent,
+            onRefresh: () async => ref.invalidate(insightsProvider),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 88),
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = constraints.maxWidth;
+                    final tileWidth = (width - 8) / 2;
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        SizedBox(
+                          width: tileWidth,
+                          child: _StatTile(
+                            label: 'Profile views',
+                            value: insights.profileViewCount,
+                            icon: Icons.visibility_outlined,
+                          ),
                         ),
-                      ),
-                      SizedBox(
-                        width: tileWidth,
-                        child: _StatTile(
-                          label: 'Total upvotes',
-                          value: insights.totalUpvotes,
-                          icon: Icons.arrow_upward_rounded,
+                        SizedBox(
+                          width: tileWidth,
+                          child: _StatTile(
+                            label: 'Total upvotes',
+                            value: insights.totalUpvotes,
+                            icon: Icons.arrow_upward_rounded,
+                          ),
                         ),
-                      ),
-                      SizedBox(
-                        width: tileWidth,
-                        child: _StatTile(
-                          label: 'Total saves',
-                          value: insights.totalSaves,
-                          icon: Icons.bookmark_outline,
+                        SizedBox(
+                          width: tileWidth,
+                          child: _StatTile(
+                            label: 'Total saves',
+                            value: insights.totalSaves,
+                            icon: Icons.bookmark_outline,
+                          ),
                         ),
-                      ),
-                      SizedBox(
-                        width: tileWidth,
-                        child: _StatTile(
-                          label: 'Store clicks',
-                          value: insights.totalCtaClicks,
-                          icon: Icons.open_in_new,
+                        SizedBox(
+                          width: tileWidth,
+                          child: _StatTile(
+                            label: 'Store clicks',
+                            value: insights.totalCtaClicks,
+                            icon: Icons.open_in_new,
+                          ),
                         ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 28),
-              Text(
-                'Pattern breakdown',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 12),
-              if (insights.patterns.isEmpty)
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 28),
                 Text(
-                  'Submit a pattern to start seeing insights here.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
-                )
-              else
-                for (final pattern in insights.patterns) ...[
-                  _PatternInsightCard(pattern: pattern),
-                  const SizedBox(height: 12),
-                ],
-            ],
+                  'Pattern breakdown',
+                  style: Theme.of(context).textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                if (insights.patterns.isEmpty)
+                  Text(
+                    'Submit a pattern to start seeing insights here.',
+                    style: Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(color: AppColors.muted),
+                  )
+                else
+                  for (final pattern in insights.patterns) ...[
+                    _PatternInsightCard(pattern: pattern),
+                    const SizedBox(height: 12),
+                  ],
+              ],
+            ),
           ),
         );
       },
@@ -133,7 +142,11 @@ class _StatTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
         boxShadow: [
-          BoxShadow(color: AppColors.accent.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 4)),
+          BoxShadow(
+            color: AppColors.accent.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -145,9 +158,9 @@ class _StatTile extends StatelessWidget {
                 child: Text(
                   label,
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.muted,
-                      ),
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.muted,
+                  ),
                 ),
               ),
               Container(
@@ -165,9 +178,9 @@ class _StatTile extends StatelessWidget {
           Text(
             NumberFormat.decimalPattern().format(value),
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
         ],
       ),
@@ -183,8 +196,12 @@ class _PatternInsightCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPdfCta = pattern.isFree && pattern.hasPdf;
-    final ctaCount = isPdfCta ? pattern.pdfDownloadCount : pattern.viewClickCount;
-    final rankValue = pattern.isArchived || pattern.ranks.all == null ? '—' : '#${pattern.ranks.all}';
+    final ctaCount = isPdfCta
+        ? pattern.pdfDownloadCount
+        : pattern.viewClickCount;
+    final rankValue = pattern.isArchived || pattern.ranks.all == null
+        ? '—'
+        : '#${pattern.ranks.all}';
     DateTime? launched;
     try {
       launched = DateTime.parse(pattern.createdAt).toLocal();
@@ -199,7 +216,11 @@ class _PatternInsightCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.border),
           boxShadow: [
-            BoxShadow(color: AppColors.accent.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 4)),
+            BoxShadow(
+              color: AppColors.accent.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
           ],
         ),
         child: Column(
@@ -214,13 +235,17 @@ class _PatternInsightCard extends StatelessWidget {
                     width: 56,
                     height: 56,
                     child: pattern.imageUrl != null
-                        ? CachedNetworkImage(imageUrl: pattern.imageUrl!, fit: BoxFit.cover)
+                        ? CachedNetworkImage(
+                            imageUrl: pattern.imageUrl!,
+                            fit: BoxFit.cover,
+                          )
                         : ColoredBox(
                             color: AppColors.background,
                             child: Center(
                               child: Text(
                                 'No photo',
-                                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.muted),
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(color: AppColors.muted),
                               ),
                             ),
                           ),
@@ -236,19 +261,24 @@ class _PatternInsightCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               pattern.title,
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
                             ),
                           ),
                           if (pattern.isArchived)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: AppColors.muted.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
                                 'Archived',
-                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
                                       fontWeight: FontWeight.w600,
                                       color: AppColors.muted,
                                     ),
@@ -263,9 +293,14 @@ class _PatternInsightCard extends StatelessWidget {
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: pattern.isFree ? 0.2 : 0.3),
+                              color: AppColors.primary.withValues(
+                                alpha: pattern.isFree ? 0.2 : 0.3,
+                              ),
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
@@ -273,14 +308,17 @@ class _PatternInsightCard extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
-                                color: pattern.isFree ? AppColors.accent : AppColors.foreground,
+                                color: pattern.isFree
+                                    ? AppColors.accent
+                                    : AppColors.foreground,
                               ),
                             ),
                           ),
                           if (launched != null)
                             Text(
                               'Launched ${DateFormat('d MMM yyyy').format(launched)}',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: AppColors.muted),
                             ),
                         ],
                       ),
@@ -292,9 +330,19 @@ class _PatternInsightCard extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                Expanded(child: _MetricCell(label: 'Upvotes', value: '${pattern.voteCount}')),
+                Expanded(
+                  child: _MetricCell(
+                    label: 'Upvotes',
+                    value: '${pattern.voteCount}',
+                  ),
+                ),
                 const SizedBox(width: 6),
-                Expanded(child: _MetricCell(label: 'Saves', value: '${pattern.saveCount}')),
+                Expanded(
+                  child: _MetricCell(
+                    label: 'Saves',
+                    value: '${pattern.saveCount}',
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 6),
@@ -308,7 +356,9 @@ class _PatternInsightCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                Expanded(child: _MetricCell(label: 'All-time rank', value: rankValue)),
+                Expanded(
+                  child: _MetricCell(label: 'All-time rank', value: rankValue),
+                ),
               ],
             ),
           ],
@@ -334,10 +384,14 @@ class _MetricCell extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: emphasize ? AppColors.primary.withValues(alpha: 0.35) : AppColors.background,
+        color: emphasize
+            ? AppColors.primary.withValues(alpha: 0.35)
+            : AppColors.background,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: emphasize ? AppColors.accent.withValues(alpha: 0.25) : AppColors.border,
+          color: emphasize
+              ? AppColors.accent.withValues(alpha: 0.25)
+              : AppColors.border,
         ),
       ),
       child: Column(
@@ -347,18 +401,20 @@ class _MetricCell extends StatelessWidget {
           Text(
             label.toUpperCase(),
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 9,
-                  letterSpacing: 0.4,
-                  color: emphasize ? AppColors.foreground.withValues(alpha: 0.8) : AppColors.muted,
-                ),
+              fontWeight: FontWeight.w700,
+              fontSize: 9,
+              letterSpacing: 0.4,
+              color: emphasize
+                  ? AppColors.foreground.withValues(alpha: 0.8)
+                  : AppColors.muted,
+            ),
           ),
           Text(
             value,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
         ],
       ),

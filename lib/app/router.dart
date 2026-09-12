@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/auth/login_redirect.dart';
 import '../../core/providers/providers.dart';
+import '../../core/theme/app_motion.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/auth/reset_password_screen.dart';
 import '../../features/home/home_screen.dart';
@@ -54,13 +55,13 @@ Page<void> _fadePage({
   return CustomTransitionPage<void>(
     key: key,
     child: child,
-    transitionDuration: const Duration(milliseconds: 180),
-    reverseTransitionDuration: const Duration(milliseconds: 140),
+    transitionDuration: AppMotion.base,
+    reverseTransitionDuration: AppMotion.fast,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       final curved = CurvedAnimation(
         parent: animation,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
+        curve: AppMotion.soft,
+        reverseCurve: AppMotion.exit,
       );
       return FadeTransition(opacity: curved, child: child);
     },

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 
 /// Account avatar + dropdown matching web AccountMenu (minus Admin).
 Future<void> showAccountMenu(BuildContext context, WidgetRef ref) async {
@@ -14,6 +15,7 @@ Future<void> showAccountMenu(BuildContext context, WidgetRef ref) async {
 
   await showModalBottomSheet<void>(
     context: context,
+    sheetAnimationStyle: AppMotion.surface,
     backgroundColor: AppColors.card,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),

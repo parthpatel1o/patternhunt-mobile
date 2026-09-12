@@ -7,6 +7,8 @@ import '../../core/api/api_client.dart';
 import '../../core/config/env.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
+import '../../shared/widgets/app_snack_bar.dart';
 import '../auth/login_screen.dart';
 import 'profile_widgets.dart';
 
@@ -24,9 +26,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final uri = Uri.parse('${Env.siteUrl}$path');
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open $uri')),
-      );
+      showAppSnackBar(context, message: 'Could not open $uri');
     }
   }
 
@@ -165,6 +165,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Future<void> _confirmDeleteAccount() async {
     final confirmed = await showDialog<bool>(
       context: context,
+      animationStyle: AppMotion.surface,
       builder: (context) => AlertDialog(
         title: const Text('Delete account?'),
         content: const Text(
@@ -190,16 +191,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       await ref.read(apiClientProvider).delete('/me');
       await Supabase.instance.client.auth.signOut();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Your account has been deleted')),
-        );
+        showAppSnackBar(context, message: 'Your account has been deleted');
         context.go('/');
       }
     } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
-      }
+      if (mounted) showAppSnackBar(context, message: e.message);
     } finally {
       if (mounted) setState(() => _deleting = false);
     }

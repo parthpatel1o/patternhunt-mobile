@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 import '../../features/saved/create_folder_dialog.dart';
 import '../../features/search/search_overlay.dart';
 import 'header_accent_button.dart';
@@ -220,9 +221,9 @@ class AppShell extends ConsumerWidget {
                     )
                   : null,
               title: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 180),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
+                duration: AppMotion.base,
+                switchInCurve: AppMotion.soft,
+                switchOutCurve: AppMotion.exit,
                 transitionBuilder: (child, animation) {
                   return FadeTransition(opacity: animation, child: child);
                 },
@@ -333,26 +334,39 @@ class _HeaderCircleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: onPressed,
-      padding: EdgeInsets.zero,
-      visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints.tightFor(
-        width: _size + 8,
-        height: _size + 8,
-      ),
-      icon: Container(
-        key: circleKey,
-        width: _size,
-        height: _size,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: background,
-          border: border == null ? null : Border.all(color: border!),
+    // Hand-rolled rather than an IconButton so the press scale can be driven by
+    // the ink well's highlight instead of a second tap recognizer.
+    return Tooltip(
+      message: tooltip,
+      child: AppPressScale(
+        scale: AppMotion.pressScaleSmall,
+        builder: (context, onHighlight) => Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onPressed,
+            onHighlightChanged: onHighlight,
+            child: SizedBox(
+              width: _size + 8,
+              height: _size + 8,
+              child: Center(
+                child: Container(
+                  key: circleKey,
+                  width: _size,
+                  height: _size,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: background,
+                    border: border == null ? null : Border.all(color: border!),
+                  ),
+                  child: child,
+                ),
+              ),
+            ),
+          ),
         ),
-        child: child,
       ),
     );
   }
@@ -481,8 +495,8 @@ class _BrandNavItem extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               AnimatedContainer(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
+                duration: AppMotion.base,
+                curve: AppMotion.soft,
                 padding: EdgeInsets.symmetric(
                   horizontal: selected ? 14 : 10,
                   vertical: 4,
@@ -494,9 +508,9 @@ class _BrandNavItem extends StatelessWidget {
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
+                  duration: AppMotion.fast,
+                  switchInCurve: AppMotion.soft,
+                  switchOutCurve: AppMotion.exit,
                   transitionBuilder: (child, animation) {
                     return FadeTransition(
                       opacity: animation,
@@ -519,8 +533,8 @@ class _BrandNavItem extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
+                duration: AppMotion.base,
+                curve: AppMotion.soft,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,

@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/auth/signup_welcome.dart';
 import '../core/providers/providers.dart';
 import '../core/theme/app_theme.dart';
+import '../shared/widgets/app_snack_bar.dart';
 import 'router.dart';
 
 final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -17,8 +18,9 @@ class PatternHuntApp extends ConsumerWidget {
     if (!inMemory && !persisted) return;
 
     ref.read(pendingSignupWelcomeProvider.notifier).state = false;
-    scaffoldMessengerKey.currentState?.showSnackBar(
-      const SnackBar(content: Text('Email confirmed — welcome to Pattern Hunt!')),
+    showAppSnackBarOn(
+      scaffoldMessengerKey.currentState,
+      message: 'Email confirmed — welcome to Pattern Hunt!',
     );
   }
 

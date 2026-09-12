@@ -9,6 +9,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 import '../../core/theme/category_icons.dart';
 import '../../shared/widgets/home_empty_state.dart';
 import '../../shared/widgets/pattern_card_widget.dart';
@@ -622,19 +623,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
       data: (page) {
         if (page.patterns.isEmpty) {
-          return HomeEmptyState(
-            categoryName: _categoryLabel(constants),
-            searchQuery: searchQuery,
-            onSeeAll: () => setState(() => category = null),
-            onClearSearch: _backToRankBoard,
+          return AppEnter(
+            rise: 4,
+            child: HomeEmptyState(
+              categoryName: _categoryLabel(constants),
+              searchQuery: searchQuery,
+              onSeeAll: () => setState(() => category = null),
+              onClearSearch: _backToRankBoard,
+            ),
           );
         }
-        return _patternColumn(
-          page,
-          showRank: !_isSearching,
-          showSubmitInvite: !_isSearching,
-          boardQuery: query,
-          reorderOnVote: !_isSearching,
+        // One list-level dissolve after the skeleton — no per-card cascade.
+        return AppEnter(
+          rise: 4,
+          child: _patternColumn(
+            page,
+            showRank: !_isSearching,
+            animateEntrance: false,
+            showSubmitInvite: !_isSearching,
+            boardQuery: query,
+            reorderOnVote: !_isSearching,
+          ),
         );
       },
     );
@@ -747,9 +756,10 @@ class _PeriodLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return AppPressable(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
+      haptic: true,
+      scale: AppMotion.pressScaleSmall,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
@@ -764,7 +774,8 @@ class _PeriodLink extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
+              duration: AppMotion.fast,
+              curve: AppMotion.soft,
               height: 2.5,
               width: selected ? 28 : 0,
               decoration: BoxDecoration(

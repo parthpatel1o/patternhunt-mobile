@@ -7,6 +7,7 @@ import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/category_icons.dart';
+import '../../shared/widgets/app_snack_bar.dart';
 import 'profile_widgets.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -132,16 +133,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             profile?.hasSubmittedPatterns == true ? true : _designer,
       });
       ref.invalidate(profileProvider);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Settings saved')),
-        );
-      }
+      if (mounted) showAppSnackBar(context, message: 'Settings saved');
     } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
-      }
+      if (mounted) showAppSnackBar(context, message: e.message);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 
 class FilterPill extends StatelessWidget {
   const FilterPill({
@@ -17,37 +19,36 @@ class FilterPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: selected ? AppColors.primary : AppColors.card,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: selected ? AppColors.primaryStrong : AppColors.border),
+    return AppPressable(
+      onTap: onTap,
+      haptic: true,
+      child: AnimatedContainer(
+        duration: AppMotion.fast,
+        curve: AppMotion.soft,
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : AppColors.card,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: selected ? AppColors.primaryStrong : AppColors.border,
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (showCheckmark) ...[
-                  const Icon(Icons.check, size: 16, color: AppColors.foreground),
-                  const SizedBox(width: 6),
-                ],
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: AppColors.foreground,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (showCheckmark) ...[
+              const Icon(Icons.check, size: 16, color: AppColors.foreground),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                color: AppColors.foreground,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                fontSize: 14,
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

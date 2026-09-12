@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,6 +9,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 import 'app_snack_bar.dart';
 import 'skeleton_loader.dart';
 
@@ -30,6 +32,7 @@ Future<void> showSaveBoardSheet(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
+    sheetAnimationStyle: AppMotion.surface,
     builder: (sheetContext) {
       return _SaveBoardSheetBody(
         patternId: patternId,
@@ -62,6 +65,7 @@ class _SaveBoardSheetBodyState extends ConsumerState<_SaveBoardSheetBody> {
 
   Future<void> _addToBoard(BoardSaveOption board) async {
     if (board.selected || _busy) return;
+    HapticFeedback.selectionClick();
     setState(() => _busy = true);
     try {
       final api = ref.read(apiClientProvider);
@@ -76,10 +80,7 @@ class _SaveBoardSheetBodyState extends ConsumerState<_SaveBoardSheetBody> {
         Navigator.pop(context);
       }
     } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
-      }
+      if (mounted) showAppSnackBar(context, message: e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -90,12 +91,10 @@ class _SaveBoardSheetBodyState extends ConsumerState<_SaveBoardSheetBody> {
     if (name.isEmpty || _busy) return;
     if (name.toLowerCase() == kDefaultBoardName.toLowerCase()) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
+        showAppSnackBar(
+          context,
+          message:
               '“$kDefaultBoardName” is reserved for your default folder.',
-            ),
-          ),
         );
       }
       return;
@@ -118,10 +117,7 @@ class _SaveBoardSheetBodyState extends ConsumerState<_SaveBoardSheetBody> {
         Navigator.pop(context);
       }
     } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
-      }
+      if (mounted) showAppSnackBar(context, message: e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

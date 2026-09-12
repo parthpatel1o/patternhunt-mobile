@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 
 /// Fullscreen multi-image lightbox for network URLs (home cards, detail, etc.).
 void showNetworkPhotoViewer(
@@ -12,6 +13,7 @@ void showNetworkPhotoViewer(
   if (imageUrls.isEmpty) return;
   showDialog<void>(
     context: context,
+    animationStyle: AppMotion.surface,
     barrierColor: Colors.black.withValues(alpha: 0.9),
     builder: (dialogContext) {
       return _NetworkPhotoViewer(

@@ -15,6 +15,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 import '../../core/theme/category_icons.dart';
 import '../../core/utils/slugify.dart';
 import '../../shared/widgets/arrow_big_up_icon.dart';
@@ -1072,6 +1073,9 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
   bool _saving = false;
   bool _ctaLoading = false;
   bool _heartPop = false;
+
+  /// Bumped on each save so the bookmark replays its pop. Web `save-pop`.
+  int _savePop = 0;
   bool _exiting = false;
   bool _flyingUp = false;
   bool _dragging = false;
@@ -1405,6 +1409,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     setState(() {
       _saving = true;
       _saved = !_saved;
+      if (!oldSaved) _savePop++;
     });
     try {
       final api = ref.read(apiClientProvider);
@@ -1412,6 +1417,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
         await api.delete('/patterns/${widget.pattern.id}/save');
       } else {
+        HapticFeedback.lightImpact();
         if (mounted) {
           showSavedSnackBar(context, onAddToFolder: _openSaveSheet);
         }
@@ -1473,8 +1479,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    showAppSnackBar(context, message: message);
   }
 
   void _movePhoto(int delta) {
@@ -2100,6 +2105,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                           children: [
                             _RoundActionButton(
                               tooltip: _saved ? 'Saved' : 'Save',
+                              iconPop: _savePop,
                               icon: _saved
                                   ? Icons.bookmark_rounded
                                   : Icons.bookmark_outline_rounded,
@@ -2481,6 +2487,7 @@ class _RoundActionButton extends StatelessWidget {
     required this.icon,
     required this.onPressed,
     this.onLongPress,
+    this.iconPop,
   });
 
   final String tooltip;
@@ -2488,8 +2495,16 @@ class _RoundActionButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final VoidCallback? onLongPress;
 
+  /// Bump to replay a pop on the icon — used to confirm a save.
+  final Object? iconPop;
+
   @override
   Widget build(BuildContext context) {
+    Widget glyph = Icon(icon, color: AppColors.accent);
+    if (iconPop != null) {
+      glyph = AppPop(trigger: iconPop, child: glyph);
+    }
+
     return Tooltip(
       message: tooltip,
       child: Material(
@@ -2502,7 +2517,7 @@ class _RoundActionButton extends StatelessWidget {
           child: SizedBox(
             width: _kActionBtnHeight,
             height: _kActionBtnHeight,
-            child: Icon(icon, color: AppColors.accent),
+            child: glyph,
           ),
         ),
       ),

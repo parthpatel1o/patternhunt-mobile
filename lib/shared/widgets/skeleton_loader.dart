@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 
 class SkeletonBox extends StatefulWidget {
   const SkeletonBox({
@@ -17,13 +19,33 @@ class SkeletonBox extends StatefulWidget {
   State<SkeletonBox> createState() => _SkeletonBoxState();
 }
 
-class _SkeletonBoxState extends State<SkeletonBox> with SingleTickerProviderStateMixin {
+class _SkeletonBoxState extends State<SkeletonBox>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat(reverse: true);
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncPulse();
+  }
+
+  void _syncPulse() {
+    if (AppMotion.reduced(context)) {
+      if (_controller.isAnimating) _controller.stop();
+      return;
+    }
+    if (!_controller.isAnimating) {
+      _controller.repeat(reverse: true);
+    }
   }
 
   @override
@@ -34,6 +56,25 @@ class _SkeletonBoxState extends State<SkeletonBox> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    // A looping pulse is exactly what reduced motion asks us to drop; hold the
+    // placeholder at a steady mid tint instead.
+    if (AppMotion.reduced(context)) {
+      return SizedBox(
+        width: widget.width,
+        height: widget.height,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(widget.borderRadius),
+            color: Color.lerp(
+              AppColors.background,
+              AppColors.border.withValues(alpha: 0.85),
+              0.5,
+            ),
+          ),
+        ),
+      );
+    }
+
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -65,8 +106,18 @@ class PatternCardSkeleton extends StatelessWidget {
 
   static const _radius = 16.0;
   static const _shadows = [
-    BoxShadow(color: Color(0x383D2F4A), blurRadius: 20, spreadRadius: -6, offset: Offset(0, 6)),
-    BoxShadow(color: Color(0x143D2F4A), blurRadius: 6, spreadRadius: -2, offset: Offset(0, 2)),
+    BoxShadow(
+      color: Color(0x383D2F4A),
+      blurRadius: 20,
+      spreadRadius: -6,
+      offset: Offset(0, 6),
+    ),
+    BoxShadow(
+      color: Color(0x143D2F4A),
+      blurRadius: 6,
+      spreadRadius: -2,
+      offset: Offset(0, 2),
+    ),
   ];
 
   @override
@@ -95,9 +146,7 @@ class PatternCardSkeleton extends StatelessWidget {
                     borderRadius: BorderRadius.circular(_radius - 1),
                     child: Row(
                       children: [
-                        const Expanded(
-                          child: SkeletonBox(borderRadius: 0),
-                        ),
+                        const Expanded(child: SkeletonBox(borderRadius: 0)),
                         Expanded(
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
@@ -109,16 +158,23 @@ class PatternCardSkeleton extends StatelessWidget {
                                     alignment: Alignment.topLeft,
                                     child: ClipRect(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
                                         mainAxisSize: MainAxisSize.min,
                                         children: const [
-                                          SkeletonBox(height: 14, borderRadius: 6),
+                                          SkeletonBox(
+                                            height: 14,
+                                            borderRadius: 6,
+                                          ),
                                           SizedBox(height: 6),
                                           Align(
                                             alignment: Alignment.centerLeft,
                                             child: SizedBox(
                                               width: 120,
-                                              child: SkeletonBox(height: 14, borderRadius: 6),
+                                              child: SkeletonBox(
+                                                height: 14,
+                                                borderRadius: 6,
+                                              ),
                                             ),
                                           ),
                                           SizedBox(height: 4),
@@ -126,7 +182,10 @@ class PatternCardSkeleton extends StatelessWidget {
                                             alignment: Alignment.centerLeft,
                                             child: SizedBox(
                                               width: 88,
-                                              child: SkeletonBox(height: 12, borderRadius: 6),
+                                              child: SkeletonBox(
+                                                height: 12,
+                                                borderRadius: 6,
+                                              ),
                                             ),
                                           ),
                                           SizedBox(height: 4),
@@ -134,7 +193,10 @@ class PatternCardSkeleton extends StatelessWidget {
                                             alignment: Alignment.centerLeft,
                                             child: SizedBox(
                                               width: 48,
-                                              child: SkeletonBox(height: 18, borderRadius: 999),
+                                              child: SkeletonBox(
+                                                height: 18,
+                                                borderRadius: 999,
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -144,9 +206,19 @@ class PatternCardSkeleton extends StatelessWidget {
                                 ),
                                 const Row(
                                   children: [
-                                    Expanded(child: SkeletonBox(height: 34, borderRadius: 999)),
+                                    Expanded(
+                                      child: SkeletonBox(
+                                        height: 34,
+                                        borderRadius: 999,
+                                      ),
+                                    ),
                                     SizedBox(width: 6),
-                                    Expanded(child: SkeletonBox(height: 34, borderRadius: 999)),
+                                    Expanded(
+                                      child: SkeletonBox(
+                                        height: 34,
+                                        borderRadius: 999,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ],

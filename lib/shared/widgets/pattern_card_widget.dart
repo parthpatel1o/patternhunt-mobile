@@ -16,6 +16,7 @@ import '../../core/auth/login_redirect.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 import '../../core/utils/slugify.dart';
 import 'arrow_big_up_icon.dart';
 import 'app_snack_bar.dart';
@@ -60,6 +61,9 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
   bool _saving = false;
   bool _ctaLoading = false;
   late bool _saved;
+
+  /// Bumped on each save so the bookmark replays its pop. Web `save-pop`.
+  int _savePop = 0;
   late bool _voted;
   late int _voteCount;
   int _imageIndex = 0;
@@ -286,8 +290,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
     } on ApiException catch (e) {
       if (mounted) {
         _applyVoteLocal(previousVoted, previousCount);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+        showAppSnackBar(context, message: e.message);
       }
     } finally {
       if (mounted) setState(() => _voting = false);
@@ -320,7 +323,11 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
         if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
         await api.delete('/patterns/${widget.pattern.id}/save');
       } else {
-        setState(() => _saved = true);
+        setState(() {
+          _saved = true;
+          _savePop++;
+        });
+        HapticFeedback.lightImpact();
         if (mounted) {
           showSavedSnackBar(context, onAddToFolder: _openSaveSheet);
         }
@@ -332,8 +339,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
       if (mounted) {
         setState(() => _saved = previous);
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+        showAppSnackBar(context, message: e.message);
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -361,9 +367,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
         if (url != null)
           await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       } on ApiException catch (e) {
-        if (mounted)
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(e.message)));
+        if (mounted) showAppSnackBar(context, message: e.message);
       } finally {
         if (mounted) setState(() => _ctaLoading = false);
       }
@@ -714,8 +718,16 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
         ],
       ),
     );
-    if (!widget.animateEntrance) return card;
-    return card.animate().fadeIn(duration: 300.ms).slideY(begin: 0.04, end: 0);
+    if (!widget.animateEntrance || AppMotion.reduced(context)) return card;
+    return card
+        .animate()
+        .fadeIn(duration: AppMotion.slow, curve: AppMotion.soft)
+        .slideY(
+          begin: 0.04,
+          end: 0,
+          duration: AppMotion.slow,
+          curve: AppMotion.soft,
+        );
   }
 
   Widget _buildGallery(List<String> images, Color bg) {
@@ -754,10 +766,13 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
               blurSigma: 4,
               onTap: _saving ? null : _toggleSave,
               onLongPress: _saving ? null : _openSaveSheet,
-              child: Icon(
-                _saved ? Icons.bookmark : Icons.bookmark_outline,
-                size: 16,
-                color: _saved ? AppColors.accent : AppColors.foreground,
+              child: AppPop(
+                trigger: _savePop,
+                child: Icon(
+                  _saved ? Icons.bookmark : Icons.bookmark_outline,
+                  size: 16,
+                  color: _saved ? AppColors.accent : AppColors.foreground,
+                ),
               ),
             ),
           ),

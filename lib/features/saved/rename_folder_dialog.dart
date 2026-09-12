@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
+import '../../shared/widgets/app_snack_bar.dart';
 
 /// Shows a rename dialog and PATCHes the board name on confirm.
 Future<void> showRenameFolderDialog(
@@ -14,6 +16,7 @@ Future<void> showRenameFolderDialog(
   final controller = TextEditingController(text: currentName);
   final name = await showDialog<String>(
     context: context,
+    animationStyle: AppMotion.surface,
     builder: (ctx) => Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       child: Padding(
@@ -102,13 +105,9 @@ Future<void> showRenameFolderDialog(
     ref.invalidate(boardsWithPatternsProvider);
     ref.invalidate(boardsProvider);
     if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Renamed to “$name”')));
+      showAppSnackBar(context, message: 'Renamed to “$name”');
     }
   } on ApiException catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
-    }
+    if (context.mounted) showAppSnackBar(context, message: e.message);
   }
 }

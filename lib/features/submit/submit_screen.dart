@@ -4,17 +4,21 @@ import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+
 import '../../core/api/api_client.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/images/square_crop.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 import '../../core/theme/category_icons.dart';
 import '../../shared/widgets/app_snack_bar.dart';
+import '../../shared/widgets/pattern_option_chip.dart';
 import '../../shared/widgets/reorderable_photo_grid.dart';
 
 class SubmitScreen extends ConsumerStatefulWidget {
@@ -101,14 +105,17 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     final max = AppConstants.instance.maxPatternImages;
     final remaining = max - _images.length;
     if (remaining <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('You can add up to $max photos.')));
+      showAppSnackBar(context, message: 'You can add up to $max photos.');
       return;
     }
 
     final picker = ImagePicker();
     final List<XFile> picked;
     if (remaining == 1) {
-      final single = await picker.pickImage(source: ImageSource.gallery, imageQuality: 95);
+      final single = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 95,
+      );
       picked = single == null ? const [] : [single];
     } else {
       picked = await picker.pickMultiImage(imageQuality: 95, limit: remaining);
@@ -119,18 +126,21 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     setState(() => _preparing = true);
     try {
       final limited = picked.take(remaining).toList();
-      final results = await Future.wait(limited.map((xfile) async {
-        final source = File(xfile.path);
-        final bytes = await source.readAsBytes();
-        final decoded = img.decodeImage(bytes);
-        if (decoded == null) return null;
-        return _compressImage(source, decoded: decoded);
-      }));
+      final results = await Future.wait(
+        limited.map((xfile) async {
+          final source = File(xfile.path);
+          final bytes = await source.readAsBytes();
+          final decoded = img.decodeImage(bytes);
+          if (decoded == null) return null;
+          return _compressImage(source, decoded: decoded);
+        }),
+      );
 
       final prepared = results.whereType<File>().toList();
       if (prepared.length < limited.length && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('We couldn’t read one of those images.')),
+        showAppSnackBar(
+          context,
+          message: 'We couldn’t read one of those images.',
         );
       }
       if (!mounted) return;
@@ -144,7 +154,11 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
   }
 
   void _moveImage(int from, int to) {
-    if (from == to || from < 0 || to < 0 || from >= _images.length || to >= _images.length) {
+    if (from == to ||
+        from < 0 ||
+        to < 0 ||
+        from >= _images.length ||
+        to >= _images.length) {
       return;
     }
     final coverChanged = from == 0 || to == 0;
@@ -163,6 +177,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     showDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.85),
+      animationStyle: AppMotion.surface,
       builder: (dialogContext) {
         return _SubmitPhotoViewer(
           images: List<File>.from(_images),
@@ -221,12 +236,18 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
                 left: 6,
                 top: 6,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.card.withValues(alpha: 0.92),
                     borderRadius: BorderRadius.circular(999),
                   ),
-                  child: Text('Cover', style: Theme.of(context).textTheme.labelSmall),
+                  child: Text(
+                    'Cover',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
                 ),
               ),
             Positioned(
@@ -290,10 +311,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
           borderRadius: BorderRadius.circular(16),
           onTap: _preparing || _uploading ? null : _pickImages,
           child: CustomPaint(
-            painter: _DashedBorderPainter(
-              color: AppColors.border,
-              radius: 16,
-            ),
+            painter: _DashedBorderPainter(color: AppColors.border, radius: 16),
             child: Center(
               child: _preparing
                   ? const SizedBox(
@@ -306,12 +324,17 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.add_photo_alternate_outlined, color: AppColors.accent, size: 26),
+                          const Icon(
+                            Icons.add_photo_alternate_outlined,
+                            color: AppColors.accent,
+                            size: 26,
+                          ),
                           const SizedBox(height: 4),
                           Text(
                             'Add photos',
                             textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.foreground,
                                 ),
@@ -319,7 +342,8 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
                           Text(
                             '$remaining remaining',
                             textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.muted),
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(color: AppColors.muted),
                           ),
                         ],
                       ),
@@ -333,20 +357,27 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
 
   Future<void> _pickPdf() async {
     if (!_isFree) return;
-    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
     final path = result?.files.single.path;
     if (path == null) return;
     final file = File(path);
     if (file.lengthSync() > AppConstants.instance.maxPdfBytes) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PDF must be 20 MB or smaller.')));
+        showAppSnackBar(context, message: 'PDF must be 20 MB or smaller.');
       }
       return;
     }
     setState(() => _pdf = file);
   }
 
-  Future<void> _putToSignedUrl(String url, File file, String contentType) async {
+  Future<void> _putToSignedUrl(
+    String url,
+    File file,
+    String contentType,
+  ) async {
     final bytes = await file.readAsBytes();
     final response = await Dio().put<List<int>>(
       url,
@@ -359,7 +390,9 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
       ),
     );
     if (response.statusCode == null || response.statusCode! >= 300) {
-      throw ApiException('Upload failed (${response.statusCode ?? 'unknown'}).');
+      throw ApiException(
+        'Upload failed (${response.statusCode ?? 'unknown'}).',
+      );
     }
   }
 
@@ -390,7 +423,9 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     }
     if (_isFree) {
       if (_pdf == null && patternUrl.isEmpty) {
-        setState(() => _error = 'Free patterns need a PDF or an external pattern URL');
+        setState(
+          () => _error = 'Free patterns need a PDF or an external pattern URL',
+        );
         return;
       }
     } else if (patternUrl.isEmpty) {
@@ -398,8 +433,11 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
       return;
     }
     if (patternUrl.isNotEmpty &&
-        !(patternUrl.startsWith('http://') || patternUrl.startsWith('https://'))) {
-      setState(() => _error = 'Pattern URL must start with http:// or https://');
+        !(patternUrl.startsWith('http://') ||
+            patternUrl.startsWith('https://'))) {
+      setState(
+        () => _error = 'Pattern URL must start with http:// or https://',
+      );
       return;
     }
 
@@ -409,10 +447,10 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     });
     try {
       final api = ref.read(apiClientProvider);
-      final urls = await api.post('/patterns/upload-urls', data: {
-        'imageCount': _images.length,
-        'hasPdf': _isFree && _pdf != null,
-      });
+      final urls = await api.post(
+        '/patterns/upload-urls',
+        data: {'imageCount': _images.length, 'hasPdf': _isFree && _pdf != null},
+      );
 
       final imageSlots = (urls['images'] as List<dynamic>? ?? [])
           .map((e) => e as Map<String, dynamic>)
@@ -453,25 +491,27 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
         payload['designerName'] = designerName;
       }
       final created = await api.post('/patterns', data: payload);
-      final patternId = created['patternId'] as String? ?? payload['patternId'] as String?;
+      final patternId =
+          created['patternId'] as String? ?? payload['patternId'] as String?;
 
       ref.invalidate(myPatternsProvider);
       ref.invalidate(patternsProvider);
       ref.invalidate(profileProvider);
       if (mounted) {
         // Land on the past 7 days board and highlight the new pattern in place.
-        context.go(Uri(
-          path: '/',
-          queryParameters: {
-            'category': _category,
-            'period': 'week',
-            if (patternId != null && patternId.isNotEmpty) 'pattern': patternId,
-          },
-        ).toString());
-        showAppSnackBar(
-          context,
-          message: 'Your pattern has been added.',
+        context.go(
+          Uri(
+            path: '/',
+            queryParameters: {
+              'category': _category,
+              'period': 'week',
+              if (patternId != null && patternId.isNotEmpty)
+                'pattern': patternId,
+            },
+          ).toString(),
         );
+        HapticFeedback.lightImpact();
+        showAppSnackBar(context, message: 'Your pattern has been added.');
       }
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -511,7 +551,10 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
         ),
         filled: true,
         fillColor: AppColors.background,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.border),
@@ -530,7 +573,10 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     Widget fieldLabel(String text) {
       return Text(
         text,
-        style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, fontSize: 14),
+        style: textTheme.bodyMedium?.copyWith(
+          fontWeight: FontWeight.w600,
+          fontSize: 14,
+        ),
       );
     }
 
@@ -558,7 +604,8 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
                 controller: _title,
                 textCapitalization: TextCapitalization.sentences,
                 maxLength: 80,
-                decoration: fieldDecoration('Tiny frog plushie').copyWith(counterText: ''),
+                decoration: fieldDecoration('Tiny frog plushie')
+                    .copyWith(counterText: ''),
               ),
               const SizedBox(height: 16),
               fieldLabel('Is this pattern free or paid?'),
@@ -566,7 +613,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: _ChoiceChip(
+                    child: PatternOptionChip(
                       selected: !_isFree,
                       label: 'Paid',
                       onTap: () => setState(() {
@@ -577,7 +624,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: _ChoiceChip(
+                    child: PatternOptionChip(
                       selected: _isFree,
                       label: 'Free',
                       onTap: () => setState(() => _isFree = true),
@@ -593,7 +640,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
                 runSpacing: 8,
                 children: [
                   for (final c in categories)
-                    _ChoiceChip(
+                    PatternOptionChip(
                       selected: _category == c.slug,
                       icon: categoryIcon(c.slug),
                       label: c.name,
@@ -622,7 +669,8 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
                 tileBuilder: (context, index) => _photoTile(index),
                 feedbackBuilder: (context, index) => _photoFeedback(index),
                 onReorder: _moveImage,
-                trailing: _images.length < AppConstants.instance.maxPatternImages
+                trailing:
+                    _images.length < AppConstants.instance.maxPatternImages
                     ? _addPhotosCard(
                         AppConstants.instance.maxPatternImages - _images.length,
                       )
@@ -632,7 +680,9 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
                 const SizedBox(height: 10),
                 Text(
                   'Your cover image needs to be a square image.',
-                  style: textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error),
+                  style: textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                 ),
               ],
             ],
@@ -641,12 +691,16 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
         const SizedBox(height: 16),
         _SubmitSection(
           title: 'Where to get it',
-          hint: _isFree ? 'Add a link, a PDF, or both.' : 'Add the shop or listing link.',
+          hint: _isFree
+              ? 'Add a link, a PDF, or both.'
+              : 'Add the shop or listing link.',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               fieldLabel(
-                _isFree ? 'Pattern URL (optional if you upload a PDF)' : 'Pattern URL',
+                _isFree
+                    ? 'Pattern URL (optional if you upload a PDF)'
+                    : 'Pattern URL',
               ),
               const SizedBox(height: 8),
               TextField(
@@ -672,8 +726,14 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
                         backgroundColor: AppColors.card,
                         side: const BorderSide(color: AppColors.border),
                         shape: const StadiumBorder(),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                        textStyle: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
                       ),
                       child: Text(_pdf == null ? 'Choose PDF' : 'Replace PDF'),
                     ),
@@ -697,7 +757,9 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
                   const SizedBox(height: 8),
                   Text(
                     _pdf!.path.split('/').last,
-                    style: textTheme.bodySmall?.copyWith(color: AppColors.muted),
+                    style: textTheme.bodySmall?.copyWith(
+                      color: AppColors.muted,
+                    ),
                   ),
                 ],
               ],
@@ -708,7 +770,10 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
           const SizedBox(height: 16),
           Text(
             _error!,
-            style: textTheme.bodySmall?.copyWith(color: AppColors.destructive, fontWeight: FontWeight.w600),
+            style: textTheme.bodySmall?.copyWith(
+              color: AppColors.destructive,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
         const SizedBox(height: 16),
@@ -722,7 +787,10 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
             disabledBackgroundColor: AppColors.accent.withValues(alpha: 0.6),
             shape: const StadiumBorder(),
             padding: const EdgeInsets.symmetric(vertical: 14),
-            textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+            textStyle: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+            ),
           ),
           child: Text(_uploading ? 'Publishing…' : 'Publish pattern'),
         ),
@@ -732,11 +800,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
 }
 
 class _SubmitSection extends StatelessWidget {
-  const _SubmitSection({
-    required this.title,
-    required this.child,
-    this.hint,
-  });
+  const _SubmitSection({required this.title, required this.child, this.hint});
 
   final String title;
   final String? hint;
@@ -771,76 +835,20 @@ class _SubmitSection extends StatelessWidget {
         children: [
           Text(
             title,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 20,
-                ),
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.w700, fontSize: 20),
           ),
           if (hint != null) ...[
             const SizedBox(height: 4),
             Text(
               hint!,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: AppColors.muted),
             ),
           ],
           const SizedBox(height: 16),
           child,
         ],
-      ),
-    );
-  }
-}
-
-class _ChoiceChip extends StatelessWidget {
-  const _ChoiceChip({
-    required this.selected,
-    required this.label,
-    required this.onTap,
-    this.icon,
-  });
-
-  final bool selected;
-  final IconData? icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected ? AppColors.primary : AppColors.background,
-      elevation: selected ? 1 : 0,
-      shadowColor: const Color(0x293D2F4A),
-      shape: StadiumBorder(
-        side: BorderSide(color: selected ? AppColors.primary : AppColors.border),
-      ),
-      child: InkWell(
-        customBorder: const StadiumBorder(),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) ...[
-                Icon(
-                  icon,
-                  size: 16,
-                  color: selected ? AppColors.primaryForeground : AppColors.muted,
-                ),
-                const SizedBox(width: 6),
-              ],
-              Text(
-                label,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                  color: selected ? AppColors.primaryForeground : AppColors.muted,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -859,7 +867,9 @@ class _DashedBorderPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     final path = Path()
-      ..addRRect(RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)));
+      ..addRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
+      );
     const dashWidth = 5.0;
     const dashSpace = 4.0;
     for (final metric in path.computeMetrics()) {
@@ -879,10 +889,7 @@ class _DashedBorderPainter extends CustomPainter {
 }
 
 class _SubmitPhotoViewer extends StatefulWidget {
-  const _SubmitPhotoViewer({
-    required this.images,
-    required this.initialIndex,
-  });
+  const _SubmitPhotoViewer({required this.images, required this.initialIndex});
 
   final List<File> images;
   final int initialIndex;
@@ -932,7 +939,10 @@ class _SubmitPhotoViewerState extends State<_SubmitPhotoViewer> {
               left: 16,
               child: Text(
                 '${_index + 1} / ${widget.images.length}${_index == 0 ? ' · Cover' : ''}',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             Positioned(

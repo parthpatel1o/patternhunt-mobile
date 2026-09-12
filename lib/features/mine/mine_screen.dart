@@ -4,12 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../../core/analytics/analytics.dart';
 import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 import '../../shared/widgets/app_empty_state.dart';
+import '../../shared/widgets/app_snack_bar.dart';
 import '../../shared/widgets/in_app_webview.dart';
 
 class MineScreen extends ConsumerWidget {
@@ -32,44 +35,46 @@ class MineScreen extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('$e')),
       data: (patterns) {
-        return RefreshIndicator(
-          color: AppColors.accent,
-          onRefresh: () async {
-            ref.invalidate(myPatternsProvider);
-            if (isDesigner) ref.invalidate(insightsProvider);
-          },
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
-            children: [
-              if (patterns.isEmpty)
-                AppEmptyState(
-                  title: isDesigner
-                      ? 'You haven’t submitted anything yet'
-                      : 'Register as a designer in Profile to submit patterns.',
-                  description: isDesigner
-                      ? 'Submit a pattern and it will show up here. You can archive or delete it anytime.'
-                      : 'Once you turn on designer mode, your published patterns will appear in this list.',
-                  action: isDesigner
-                      ? EmptyStatePillButton(
-                          label: 'Submit a pattern',
-                          filled: true,
-                          onPressed: () => context.go('/submit'),
-                        )
-                      : EmptyStatePillButton(
-                          label: 'Open Profile',
-                          filled: false,
-                          onPressed: () => context.go('/profile'),
-                        ),
-                )
-              else
-                for (final pattern in patterns) ...[
-                  _MyPatternRow(
-                    pattern: pattern,
-                    insight: statsById[pattern.id],
-                  ),
-                  const SizedBox(height: 12),
-                ],
-            ],
+        // Dissolves in once when the spinner hands over, not on every rebuild.
+        return AppEnter(
+          rise: 4,
+          child: RefreshIndicator(
+            color: AppColors.accent,
+            onRefresh: () async {
+              ref.invalidate(myPatternsProvider);
+              if (isDesigner) ref.invalidate(insightsProvider);
+            },
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
+              children: [
+                if (patterns.isEmpty)
+                  AppEmptyState(
+                    title: isDesigner ? 'You haven’t submitted anything yet' : 'Register as a designer in Profile to submit patterns.',
+                    description: isDesigner
+                        ? 'Submit a pattern and it will show up here. You can archive or delete it anytime.'
+                        : 'Once you turn on designer mode, your published patterns will appear in this list.',
+                    action: isDesigner
+                        ? EmptyStatePillButton(
+                            label: 'Submit a pattern',
+                            filled: true,
+                            onPressed: () => context.go('/submit'),
+                          )
+                        : EmptyStatePillButton(
+                            label: 'Open Profile',
+                            filled: false,
+                            onPressed: () => context.go('/profile'),
+                          ),
+                  )
+                else
+                  for (final pattern in patterns) ...[
+                    _MyPatternRow(
+                      pattern: pattern,
+                      insight: statsById[pattern.id],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+              ],
+            ),
           ),
         );
       },
@@ -112,10 +117,7 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
           await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
         }
       } on ApiException catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(e.message)));
-        }
+        if (mounted) showAppSnackBar(context, message: e.message);
       } finally {
         if (mounted) setState(() => _ctaLoading = false);
       }
@@ -177,12 +179,16 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
                           height: 56,
                           child: cover != null
                               ? CachedNetworkImage(
-                                  imageUrl: cover, fit: BoxFit.cover)
+                                  imageUrl: cover,
+                                  fit: BoxFit.cover,
+                                )
                               : ColoredBox(
                                   color: AppColors.background,
                                   child: Icon(
                                     Icons.image_outlined,
-                                    color: AppColors.muted.withValues(alpha: 0.5),
+                                    color: AppColors.muted.withValues(
+                                      alpha: 0.5,
+                                    ),
                                   ),
                                 ),
                         ),
@@ -193,7 +199,9 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
                           bottom: 2,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 1),
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.accent.withValues(alpha: 0.9),
                               borderRadius: BorderRadius.circular(999),
@@ -225,9 +233,7 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
                           children: [
                             Text(
                               pattern.title,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
+                              style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(
                                     fontWeight: FontWeight.w700,
                                     height: 1.2,
@@ -236,16 +242,18 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
                             if (pattern.isArchived)
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: AppColors.muted.withValues(alpha: 0.15),
+                                  color: AppColors.muted.withValues(
+                                    alpha: 0.15,
+                                  ),
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: Text(
                                   'Archived',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelSmall
+                                  style: Theme.of(context).textTheme.labelSmall
                                       ?.copyWith(
                                         fontWeight: FontWeight.w600,
                                         fontSize: 10,
@@ -263,10 +271,13 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: AppColors.primary.withValues(
-                                    alpha: pattern.isFree ? 0.2 : 0.3),
+                                  alpha: pattern.isFree ? 0.2 : 0.3,
+                                ),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
@@ -283,9 +294,7 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
                             if (launched != null)
                               Text(
                                 'Launched ${DateFormat('d MMM yyyy').format(launched)}',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
+                                style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(color: AppColors.muted),
                               ),
                           ],
@@ -300,11 +309,11 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
                                 : '$ctaCount ${ctaCount == 1 ? 'click' : 'clicks'}',
                             ?rankLabel,
                           ].join(' · '),
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.muted,
-                                  ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.muted,
+                              ),
                         ),
                       ],
                     ),
@@ -332,14 +341,19 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.accent,
                   foregroundColor: AppColors.accentForeground,
-                  disabledBackgroundColor:
-                      AppColors.accent.withValues(alpha: 0.6),
+                  disabledBackgroundColor: AppColors.accent.withValues(
+                    alpha: 0.6,
+                  ),
                   shape: const StadiumBorder(),
                   visualDensity: VisualDensity.compact,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   textStyle: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -348,8 +362,7 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () =>
-                        context.push('/mine/${pattern.id}/edit'),
+                    onPressed: () => context.push('/mine/${pattern.id}/edit'),
                     icon: const Icon(Icons.edit_outlined, size: 14),
                     label: const Text('Edit'),
                     style: OutlinedButton.styleFrom(
@@ -359,9 +372,13 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
                       shape: const StadiumBorder(),
                       visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 8),
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
                       textStyle: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 13),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                 ),
@@ -376,9 +393,13 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
                       shape: const StadiumBorder(),
                       visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 8),
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
                       textStyle: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 13),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
                     ),
                     child: Text(
                       pattern.isArchived ? 'Unarchive' : 'Archive',
@@ -394,14 +415,18 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.destructive,
                       side: BorderSide(
-                          color:
-                              AppColors.destructive.withValues(alpha: 0.3)),
+                        color: AppColors.destructive.withValues(alpha: 0.3),
+                      ),
                       shape: const StadiumBorder(),
                       visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 8),
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
                       textStyle: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 13),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
                     ),
                     child: const Text(
                       'Delete',
@@ -427,28 +452,29 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
       ref.invalidate(myPatternsProvider);
       ref.invalidate(insightsProvider);
     } on ApiException catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
-      }
+      if (context.mounted) showAppSnackBar(context, message: e.message);
     }
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      animationStyle: AppMotion.surface,
       builder: (ctx) => AlertDialog(
         title: Text('Delete “${pattern.title}”?'),
         content: const Text(
-            'This pattern will be deleted forever. This cannot be undone.'),
+          'This pattern will be deleted forever. This cannot be undone.',
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
-                backgroundColor: AppColors.destructive),
+              backgroundColor: AppColors.destructive,
+            ),
             child: const Text('Delete pattern'),
           ),
         ],
@@ -460,10 +486,7 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
       ref.invalidate(myPatternsProvider);
       ref.invalidate(insightsProvider);
     } on ApiException catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
-      }
+      if (context.mounted) showAppSnackBar(context, message: e.message);
     }
   }
 }
