@@ -35,11 +35,19 @@ final profileProvider = FutureProvider<UserProfile?>((ref) async {
 });
 
 class PatternQuery {
-  const PatternQuery({this.category, this.period = 'all', this.q});
+  const PatternQuery({
+    this.category,
+    this.period = 'all',
+    this.q,
+    this.freeOnly = false,
+  });
 
   final String? category;
   final String period;
   final String? q;
+
+  /// Match web `freeOnly` → query param `free=1`.
+  final bool freeOnly;
 
   Map<String, dynamic> toQuery({int offset = 0}) {
     final map = <String, dynamic>{
@@ -50,6 +58,7 @@ class PatternQuery {
       'limit': AppConstants.instance.scoreboardPageSize,
     };
     if (q != null && q!.isNotEmpty) map['q'] = q;
+    if (freeOnly) map['free'] = '1';
     return map;
   }
 
@@ -58,10 +67,11 @@ class PatternQuery {
       other is PatternQuery &&
       other.category == category &&
       other.period == period &&
-      other.q == q;
+      other.q == q &&
+      other.freeOnly == freeOnly;
 
   @override
-  int get hashCode => Object.hash(category, period, q);
+  int get hashCode => Object.hash(category, period, q, freeOnly);
 }
 
 class PatternsNotifier extends FamilyAsyncNotifier<PatternsPage, PatternQuery> {

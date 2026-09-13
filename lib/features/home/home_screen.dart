@@ -10,9 +10,10 @@ import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
-import '../../core/theme/category_icons.dart';
+import '../../shared/widgets/category_dropdown.dart';
 import '../../shared/widgets/home_empty_state.dart';
 import '../../shared/widgets/pattern_card_widget.dart';
+import '../../shared/widgets/rank_board_filter.dart';
 import '../../shared/widgets/submit_invite_card.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 
@@ -23,6 +24,7 @@ class HomeScreen extends ConsumerStatefulWidget {
     this.focusPatternId,
     this.initialCategory,
     this.initialPeriod,
+    this.initialFreeOnly = false,
   });
 
   final String? initialQuery;
@@ -32,6 +34,9 @@ class HomeScreen extends ConsumerStatefulWidget {
   final String? initialCategory;
   final String? initialPeriod;
 
+  /// Match web `?free=1` — free-only filter on the rank board.
+  final bool initialFreeOnly;
+
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
@@ -39,6 +44,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   String? category;
   String period = 'all';
+  bool freeOnly = false;
   String? searchQuery;
   bool _categoryInitialized = false;
   final _scrollController = ScrollController();
@@ -90,6 +96,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         forcedPeriod == 'month') {
       period = forcedPeriod!;
     }
+    freeOnly = widget.initialFreeOnly;
     final focusId = widget.focusPatternId?.trim();
     if (!_isSearching && focusId != null && focusId.isNotEmpty) {
       _focusId = focusId;
@@ -115,6 +122,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         });
       }
     }
+    if (widget.initialFreeOnly != oldWidget.initialFreeOnly) {
+      setState(() => freeOnly = widget.initialFreeOnly);
+    }
   }
 
   @override
@@ -136,6 +146,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       category: _isSearching ? null : category,
       period: period,
       q: searchQuery,
+      freeOnly: _isSearching ? false : freeOnly,
     );
     ref.read(patternsProvider(query).notifier).loadMore();
   }
@@ -182,7 +193,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<PatternsPage> _fetchContainingPage(String patternId) async {
     final api = ref.read(apiClientProvider);
-    final query = PatternQuery(category: category, period: period);
+    final query = PatternQuery(
+      category: category,
+      period: period,
+      freeOnly: freeOnly,
+    );
     PatternsPage? firstPage;
     try {
       final focused = await api.getData(
@@ -252,6 +267,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             query: PatternQuery(
               category: category,
               period: period,
+              freeOnly: freeOnly,
             ).toQuery(offset: current.nextOffset!),
             map: (json) => PatternsPage.fromJson(json as Map<String, dynamic>),
           );
@@ -429,29 +445,57 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _onCategoryChanged(String value) {
     final next = value == 'all' ? null : value;
     if (_rankFocusMode) {
-      context.go(_rankBoardLocation(category: next, period: period));
+      // Match web CategoryBar: category links do not carry freeOnly.
+      context.go(
+        _rankBoardLocation(category: next, period: period, freeOnly: false),
+      );
       return;
     }
-    setState(() => category = next);
+    setState(() {
+      category = next;
+      freeOnly = false;
+    });
   }
 
   void _onPeriodChanged(String value) {
     if (_rankFocusMode) {
-      context.go(_rankBoardLocation(category: category, period: value));
+      context.go(
+        _rankBoardLocation(
+          category: category,
+          period: value,
+          freeOnly: freeOnly,
+        ),
+      );
       return;
     }
     setState(() => period = value);
   }
 
+  void _onFreeOnlyChanged(bool value) {
+    if (_rankFocusMode) {
+      context.go(
+        _rankBoardLocation(
+          category: category,
+          period: period,
+          freeOnly: value,
+        ),
+      );
+      return;
+    }
+    setState(() => freeOnly = value);
+  }
+
   String _rankBoardLocation({
     required String? category,
     required String period,
+    bool freeOnly = false,
   }) {
     return Uri(
       path: '/',
       queryParameters: {
         'category': category ?? 'all',
         if (period != 'all') 'period': period,
+        if (freeOnly) 'free': '1',
       },
     ).toString();
   }
@@ -482,6 +526,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       category: _isSearching ? null : category,
       period: period,
       q: searchQuery,
+      freeOnly: _isSearching ? false : freeOnly,
     );
 
     return RefreshIndicator(
@@ -508,7 +553,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ?.copyWith(fontWeight: FontWeight.w700, height: 1.25),
             ),
             const SizedBox(height: 14),
-            _CategoryDropdown(
+            CategoryDropdown(
               value: category ?? 'all',
               entries: [
                 (value: 'all', label: 'All categories'),
@@ -532,7 +577,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ],
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 4),
           ] else ...[
             Align(
               alignment: Alignment.centerLeft,
@@ -569,6 +614,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 12),
           ],
+          if (!_isSearching)
+            // Sit just above the first card — matches web RankBoardFilter.
+            Align(
+              alignment: Alignment.centerRight,
+              child: RankBoardFilter(
+                freeOnly: freeOnly,
+                onFreeOnlyChanged: _onFreeOnlyChanged,
+              ),
+            ),
           if (_singlePatternMode)
             _buildSinglePatternResults(constants)
           else if (_rankFocusMode)
@@ -589,7 +643,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       error: (_, _) => HomeEmptyState(
         categoryName: _categoryLabel(constants),
         searchQuery: searchQuery,
+        freeOnly: freeOnly,
         onClearSearch: _backToRankBoard,
+        onClearFreeOnly: () => _onFreeOnlyChanged(false),
       ),
       data: (pattern) => PatternCardWidget(
         pattern: pattern,
@@ -628,8 +684,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: HomeEmptyState(
               categoryName: _categoryLabel(constants),
               searchQuery: searchQuery,
-              onSeeAll: () => setState(() => category = null),
+              freeOnly: !_isSearching && freeOnly,
+              onSeeAll: () => setState(() {
+                category = null;
+                freeOnly = false;
+              }),
               onClearSearch: _backToRankBoard,
+              onClearFreeOnly: () => _onFreeOnlyChanged(false),
             ),
           );
         }
@@ -704,7 +765,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ? _focusKey
                 : ValueKey(page.patterns[i].id),
             pattern: page.patterns[i],
-            rank: page.rankOffset + i + 1,
+            // Match web PatternGrid: prefer board rank from the API so free-only
+            // keeps real period/all-time positions instead of reindexing 1..n.
+            rank: page.patterns[i].allTimeRank ?? (page.rankOffset + i + 1),
             rankPeriod: period,
             showRank: showRank,
             animateEntrance: animateEntrance,
@@ -786,161 +849,6 @@ class _PeriodLink extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _CategoryDropdown extends StatelessWidget {
-  const _CategoryDropdown({
-    required this.value,
-    required this.entries,
-    required this.onChanged,
-  });
-
-  final String value;
-  final List<({String value, String label})> entries;
-  final ValueChanged<String> onChanged;
-
-  String get _label =>
-      entries.where((e) => e.value == value).map((e) => e.label).firstOrNull ??
-      'All categories';
-
-  @override
-  Widget build(BuildContext context) {
-    final selectedIcon = categoryIcon(value);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final menuWidth = constraints.maxWidth;
-        return MenuAnchor(
-          crossAxisUnconstrained: false,
-          style: MenuStyle(
-            backgroundColor: const WidgetStatePropertyAll(AppColors.card),
-            elevation: const WidgetStatePropertyAll(10),
-            shadowColor: const WidgetStatePropertyAll(Color(0x383D2F4A)),
-            minimumSize: WidgetStatePropertyAll(Size(menuWidth, 0)),
-            maximumSize: WidgetStatePropertyAll(
-              Size(menuWidth, double.infinity),
-            ),
-            shape: WidgetStatePropertyAll(
-              RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(color: AppColors.border),
-              ),
-            ),
-            padding: const WidgetStatePropertyAll(EdgeInsets.all(6)),
-          ),
-          builder: (context, controller, child) {
-            return SizedBox(
-              width: menuWidth,
-              child: Material(
-                color: AppColors.card,
-                elevation: 1.5,
-                shadowColor: const Color(0x293D2F4A),
-                shape: const StadiumBorder(
-                  side: BorderSide(color: AppColors.border),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: () {
-                    if (controller.isOpen) {
-                      controller.close();
-                    } else {
-                      controller.open();
-                    }
-                  },
-                  child: SizedBox(
-                    height: 44,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 14, 0),
-                      child: Row(
-                        children: [
-                          Icon(
-                            selectedIcon,
-                            size: 16,
-                            color: AppColors.foreground,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 14,
-                                    color: AppColors.foreground,
-                                  ),
-                            ),
-                          ),
-                          AnimatedRotation(
-                            turns: controller.isOpen ? 0.5 : 0,
-                            duration: const Duration(milliseconds: 180),
-                            child: const Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              size: 20,
-                              color: AppColors.muted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-          menuChildren: [
-            for (final entry in entries)
-              MenuItemButton(
-                onPressed: () => onChanged(entry.value),
-                style: ButtonStyle(
-                  backgroundColor: WidgetStatePropertyAll(
-                    entry.value == value
-                        ? AppColors.primary
-                        : Colors.transparent,
-                  ),
-                  shape: WidgetStatePropertyAll(
-                    RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  padding: const WidgetStatePropertyAll(
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  ),
-                  overlayColor: WidgetStatePropertyAll(
-                    AppColors.primary.withValues(alpha: 0.35),
-                  ),
-                  minimumSize: WidgetStatePropertyAll(Size(menuWidth - 12, 44)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      categoryIcon(entry.value),
-                      size: 16,
-                      color: entry.value == value
-                          ? AppColors.primaryForeground
-                          : AppColors.foreground,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        entry.label,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                          color: entry.value == value
-                              ? AppColors.primaryForeground
-                              : AppColors.foreground,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        );
-      },
     );
   }
 }

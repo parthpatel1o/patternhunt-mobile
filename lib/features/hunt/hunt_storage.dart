@@ -11,6 +11,7 @@ class HuntRun {
     required this.category,
     required this.period,
     required this.show,
+    required this.freeOnly,
     required this.index,
   });
 
@@ -19,6 +20,9 @@ class HuntRun {
   final String category;
   final String period;
   final String show;
+
+  /// Match web `freeOnly` / session `hunt_run_free`.
+  final bool freeOnly;
   final int index;
 
   HuntRun copyWith({int? index}) {
@@ -28,6 +32,7 @@ class HuntRun {
       category: category,
       period: period,
       show: show,
+      freeOnly: freeOnly,
       index: index ?? this.index,
     );
   }
@@ -40,11 +45,14 @@ class HuntStorage {
   static const _periodKey = 'hunt.period';
   /// Bumped when show-filter defaults / shape changed (voted-only checkbox).
   static const _showKey = 'hunt.show.v5';
+  /// Match web `hunt_free_v1`.
+  static const _freeKey = 'hunt.free.v1';
   static const _runSeedKey = 'hunt.run.seed';
   static const _runOrderKey = 'hunt.run.order';
   static const _runCategoryKey = 'hunt.run.category';
   static const _runPeriodKey = 'hunt.run.period';
   static const _runShowKey = 'hunt.run.show';
+  static const _runFreeKey = 'hunt.run.free';
   static const _runIndexKey = 'hunt.run.index';
 
   Future<SharedPreferences> get _preferences => SharedPreferences.getInstance();
@@ -99,11 +107,20 @@ class HuntStorage {
     );
   }
 
+  Future<bool> readFreeOnly() async {
+    return (await _preferences).getBool(_freeKey) ?? false;
+  }
+
+  Future<void> writeFreeOnly(bool freeOnly) async {
+    await (await _preferences).setBool(_freeKey, freeOnly);
+  }
+
   Future<void> writePreferences({
     required String category,
     required String order,
     required String period,
     required String show,
+    required bool freeOnly,
   }) async {
     final preferences = await _preferences;
     await Future.wait([
@@ -111,6 +128,7 @@ class HuntStorage {
       preferences.setString(_orderKey, order),
       preferences.setString(_periodKey, period),
       preferences.setString(_showKey, normalizeHuntShowFilter(show)),
+      preferences.setBool(_freeKey, freeOnly),
     ]);
   }
 
@@ -121,6 +139,7 @@ class HuntStorage {
     final category = preferences.getString(_runCategoryKey);
     final period = preferences.getString(_runPeriodKey);
     final showRaw = preferences.getString(_runShowKey);
+    final freeOnly = preferences.getBool(_runFreeKey) ?? false;
     final index = preferences.getInt(_runIndexKey);
     if (seed == null ||
         order == null ||
@@ -136,6 +155,7 @@ class HuntStorage {
       category: category,
       period: period,
       show: show,
+      freeOnly: freeOnly,
       index: index,
     );
   }
@@ -148,6 +168,7 @@ class HuntStorage {
       preferences.setString(_runCategoryKey, run.category),
       preferences.setString(_runPeriodKey, run.period),
       preferences.setString(_runShowKey, normalizeHuntShowFilter(run.show)),
+      preferences.setBool(_runFreeKey, run.freeOnly),
       preferences.setInt(_runIndexKey, run.index),
     ]);
   }
@@ -160,6 +181,7 @@ class HuntStorage {
       preferences.remove(_runCategoryKey),
       preferences.remove(_runPeriodKey),
       preferences.remove(_runShowKey),
+      preferences.remove(_runFreeKey),
       preferences.remove(_runIndexKey),
     ]);
   }

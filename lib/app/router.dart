@@ -121,16 +121,19 @@ final routerProvider = Provider<GoRouter>((ref) {
                   final patternId = state.uri.queryParameters['pattern'];
                   final category = state.uri.queryParameters['category'];
                   final period = state.uri.queryParameters['period'];
+                  final free = state.uri.queryParameters['free'];
+                  final freeOnly = free == '1' || free == 'true';
                   return _fadePage(
                     key: state.pageKey,
                     child: HomeScreen(
                       key: ValueKey(
-                        'home-${q ?? ''}-${patternId ?? ''}-${category ?? ''}-${period ?? ''}',
+                        'home-${q ?? ''}-${patternId ?? ''}-${category ?? ''}-${period ?? ''}-${freeOnly ? 'free' : 'all'}',
                       ),
                       initialQuery: q,
                       focusPatternId: patternId,
                       initialCategory: category,
                       initialPeriod: period,
+                      initialFreeOnly: freeOnly,
                     ),
                   );
                 },

@@ -8,14 +8,18 @@ class HomeEmptyState extends StatelessWidget {
     super.key,
     this.categoryName,
     this.searchQuery,
+    this.freeOnly = false,
     this.onSeeAll,
     this.onClearSearch,
+    this.onClearFreeOnly,
   });
 
   final String? categoryName;
   final String? searchQuery;
+  final bool freeOnly;
   final VoidCallback? onSeeAll;
   final VoidCallback? onClearSearch;
+  final VoidCallback? onClearFreeOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +32,13 @@ class HomeEmptyState extends StatelessWidget {
       title = 'No patterns found';
       description =
           'Nothing matched “$q”. Try a designer name, a shorter word, or check the spelling.';
+    } else if (freeOnly) {
+      title = categoryName != null
+          ? 'No free $categoryName patterns yet'
+          : 'No free patterns yet';
+      description = categoryName != null
+          ? 'Nothing free is on the board in $categoryName. Turn off Free only, or browse everything.'
+          : 'Nothing free is on the board right now. Turn off Free only to see paid patterns too.';
     } else if (categoryName != null) {
       title = 'No $categoryName patterns yet';
       description =
@@ -53,7 +64,13 @@ class HomeEmptyState extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                if (categoryName != null)
+                if (freeOnly)
+                  EmptyStatePillButton(
+                    label: 'Show all patterns',
+                    filled: false,
+                    onPressed: onClearFreeOnly ?? onSeeAll ?? () => context.go('/'),
+                  )
+                else if (categoryName != null)
                   EmptyStatePillButton(
                     label: 'See all patterns',
                     filled: false,

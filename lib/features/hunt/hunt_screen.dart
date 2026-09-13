@@ -16,10 +16,10 @@ import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
-import '../../core/theme/category_icons.dart';
 import '../../core/utils/slugify.dart';
 import '../../shared/widgets/arrow_big_up_icon.dart';
 import '../../shared/widgets/app_snack_bar.dart';
+import '../../shared/widgets/category_dropdown.dart';
 import '../../shared/widgets/header_accent_button.dart';
 import '../../shared/widgets/in_app_webview.dart';
 import '../../shared/widgets/save_board_sheet.dart';
@@ -98,6 +98,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
   String _order = 'random';
   String _period = 'all';
   String _show = kDefaultHuntShowFilter;
+  bool _freeOnly = false;
   String _seed = '';
   List<PatternCard> _patterns = const [];
   int _pageOffset = 0;
@@ -116,6 +117,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
   String? _setupOrder;
   String? _setupPeriod;
   String? _setupShow;
+  bool? _setupFreeOnly;
   _HuntPhase? _phaseBeforeSetup;
 
   /// Underlay side under the front card — web `underlaySide`: prev vs next.
@@ -150,6 +152,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
       _order = run.order;
       _period = run.period;
       _show = run.show;
+      _freeOnly = run.freeOnly;
       _seed = run.seed;
       final pageSize = constants.huntPageSize;
       final offset = (run.index ~/ pageSize) * pageSize;
@@ -162,6 +165,8 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     _order = constants.defaultHuntOrder;
     _period = 'all';
     _show = storedShow;
+    // Match web: setup/default freeOnly starts false (preference written on apply).
+    _freeOnly = false;
     await _startHunt();
   }
 
@@ -173,6 +178,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
       'period': _period,
       // API ignores show for logged-out users.
       'show': _show,
+      if (_freeOnly) 'free': '1',
       'offset': offset,
       'limit': AppConstants.instance.huntPageSize,
     };
@@ -264,6 +270,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
       order: _order,
       period: _period,
       show: _show,
+      freeOnly: _freeOnly,
     );
     if (!mounted) return;
     await _loadPage(offset: 0, targetAbsoluteIndex: 0);
@@ -277,6 +284,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
         category: _category,
         period: _period,
         show: _show,
+        freeOnly: _freeOnly,
         index: _pageOffset + _index,
       ),
     );
@@ -385,6 +393,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
       _setupOrder = _order;
       _setupPeriod = _period;
       _setupShow = _show;
+      _setupFreeOnly = _freeOnly;
       _phase = _HuntPhase.setup;
     });
   }
@@ -396,11 +405,13 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
         _order = _setupOrder!;
         _period = _setupPeriod!;
         _show = _setupShow ?? kDefaultHuntShowFilter;
+        _freeOnly = _setupFreeOnly ?? false;
       }
       _setupCategory = null;
       _setupOrder = null;
       _setupPeriod = null;
       _setupShow = null;
+      _setupFreeOnly = null;
       _phase = _phaseBeforeSetup ?? _HuntPhase.hunting;
       _phaseBeforeSetup = null;
     });
@@ -411,6 +422,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     _setupOrder = null;
     _setupPeriod = null;
     _setupShow = null;
+    _setupFreeOnly = null;
     _phaseBeforeSetup = null;
     await _storage.clearHuntRun();
     if (!mounted) return;
@@ -595,6 +607,11 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     await _storage.writeShow(value);
   }
 
+  Future<void> _setFreeOnly(bool value) async {
+    setState(() => _freeOnly = value);
+    await _storage.writeFreeOnly(value);
+  }
+
   Widget _buildSetup() {
     final constants = AppConstants.instance;
     final session = ref.watch(sessionProvider);
@@ -621,23 +638,17 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              _FilterGroup(
+              _FilterSection(
                 label: 'Category',
-                children: [
-                  _choiceChip(
-                    'All categories',
-                    _category == 'all',
-                    () => unawaited(_setCategory('all')),
-                    icon: categoryIcon('all'),
-                  ),
-                  for (final category in constants.categories)
-                    _choiceChip(
-                      category.name,
-                      _category == category.slug,
-                      () => unawaited(_setCategory(category.slug)),
-                      icon: categoryIcon(category.slug),
-                    ),
-                ],
+                child: CategoryDropdown(
+                  value: _category,
+                  entries: [
+                    (value: 'all', label: 'All categories'),
+                    for (final category in constants.categories)
+                      (value: category.slug, label: category.name),
+                  ],
+                  onChanged: (value) => unawaited(_setCategory(value)),
+                ),
               ),
               const SizedBox(height: 22),
               _FilterGroup(
@@ -663,8 +674,14 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
                     ),
                 ],
               ),
+              const SizedBox(height: 22),
+              _ShowCheckRow(
+                label: 'Free only',
+                checked: _freeOnly,
+                onTap: () => unawaited(_setFreeOnly(!_freeOnly)),
+              ),
               if (session != null) ...[
-                const SizedBox(height: 22),
+                const SizedBox(height: 10),
                 _ShowCheckRow(
                   label: 'Show already voted patterns',
                   checked: huntShowIncludesVoted(_show),
@@ -927,11 +944,11 @@ class _HuntPage {
   final int? nextOffset;
 }
 
-class _FilterGroup extends StatelessWidget {
-  const _FilterGroup({required this.label, required this.children});
+class _FilterSection extends StatelessWidget {
+  const _FilterSection({required this.label, required this.child});
 
   final String label;
-  final List<Widget> children;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
@@ -948,8 +965,23 @@ class _FilterGroup extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        Wrap(spacing: 10, runSpacing: 10, children: children),
+        child,
       ],
+    );
+  }
+}
+
+class _FilterGroup extends StatelessWidget {
+  const _FilterGroup({required this.label, required this.children});
+
+  final String label;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return _FilterSection(
+      label: label,
+      child: Wrap(spacing: 10, runSpacing: 10, children: children),
     );
   }
 }
