@@ -43,7 +43,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   String? category;
-  String period = 'all';
+  String period = 'week';
   bool freeOnly = false;
   String? searchQuery;
   bool _categoryInitialized = false;
@@ -52,6 +52,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String? _focusId;
   PatternsPage? _focusedPage;
   bool _focusLoading = false;
+  String? _focusError;
   bool _focusLoadStarted = false;
   bool _showFocusEffect = false;
   bool _revealedFocus = false;
@@ -95,6 +96,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         forcedPeriod == 'week' ||
         forcedPeriod == 'month') {
       period = forcedPeriod!;
+    } else {
+      period = AppConstants.instance.defaultRankBoardPeriod;
     }
     freeOnly = widget.initialFreeOnly;
     final focusId = widget.focusPatternId?.trim();
@@ -162,7 +165,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _loadFocusedBoard() async {
     final id = _focusId;
     if (id == null || !mounted) return;
-    setState(() => _focusLoading = _focusedPage == null);
+    setState(() {
+      _focusLoading = _focusedPage == null;
+      _focusError = null;
+    });
     try {
       final page = await _fetchContainingPage(id);
       if (!mounted || _focusId != id) return;
@@ -185,8 +191,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (!mounted || _focusId != id) return;
       setState(() {
         _focusLoading = false;
-        _focusId = null;
-        _focusedPage = null;
+        _focusError = 'Could not load focused rank board';
       });
     }
   }
@@ -198,56 +203,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       period: period,
       freeOnly: freeOnly,
     );
-    PatternsPage? firstPage;
-    try {
-      final focused = await api.getData(
-        '/patterns',
-        query: {...query.toQuery(), 'pattern': patternId},
-        map: (json) => json as Map<String, dynamic>,
-      );
-      final page = PatternsPage.fromJson(focused);
-      if (focused['found'] == true &&
-          page.patterns.any((pattern) => pattern.id == patternId)) {
-        return page;
-      }
-      if (page.patterns.any((pattern) => pattern.id == patternId)) {
-        return page;
-      }
-      // The API answered explicitly that this pattern is not on the board.
-      if (focused.containsKey('found')) return page;
-      firstPage = page;
-    } catch (_) {
-      firstPage = null;
+    final focused = await api.getData(
+      '/patterns',
+      query: {...query.toQuery(), 'pattern': patternId},
+      map: (json) => json as Map<String, dynamic>,
+    );
+    final focusedPage = PatternsPage.fromJson(focused);
+
+    // Current API: one response contains ranks #1 through the focused item.
+    // Respect an explicit `found` answer; never fall back to page scanning for
+    // a current API response or for a failed focused request.
+    if (focused.containsKey('found')) {
+      return combineFocusedBoardPages([focusedPage]);
     }
 
-    // Older API ignores `pattern` and always returns the first page.
-    final PatternsPage start =
-        firstPage ??
-        await api.getData(
-          '/patterns',
-          query: query.toQuery(),
-          map: (json) => PatternsPage.fromJson(json as Map<String, dynamic>),
-        );
+    // Older API ignored `pattern` and returned the first page. If an older
+    // variant instead returned only a target page, restart at offset 0 before
+    // accumulating downward pages—there is no upward paging.
+    final start = focusedPage.rankOffset == 0
+        ? focusedPage
+        : await api.getData(
+            '/patterns',
+            query: query.toQuery(),
+            map: (json) => PatternsPage.fromJson(json as Map<String, dynamic>),
+          );
+    final pages = <PatternsPage>[start];
     if (start.patterns.any((pattern) => pattern.id == patternId)) {
-      return start.copyWith(rankOffset: 0);
+      return combineFocusedBoardPages(pages);
     }
-
     var offset = start.nextOffset ?? AppConstants.instance.scoreboardPageSize;
     var hasMore = start.hasMore;
-    for (var i = 0; i < 40 && hasMore; i++) {
+    while (hasMore) {
       final next = await api.getData(
         '/patterns',
         query: query.toQuery(offset: offset),
         map: (json) => PatternsPage.fromJson(json as Map<String, dynamic>),
       );
+      pages.add(next);
       if (next.patterns.any((pattern) => pattern.id == patternId)) {
-        return next.copyWith(rankOffset: offset);
+        return combineFocusedBoardPages(pages);
       }
       if (!next.hasMore || next.nextOffset == null) break;
       offset = next.nextOffset!;
       hasMore = next.hasMore;
     }
-    return start;
+    return combineFocusedBoardPages(pages);
   }
 
   Future<void> _loadMoreFocused() async {
@@ -258,7 +258,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         current.loadingMore) {
       return;
     }
-    setState(() => _focusedPage = current.copyWith(loadingMore: true));
+    setState(
+      () => _focusedPage = current.copyWith(
+        loadingMore: true,
+        loadMoreFailed: false,
+      ),
+    );
     try {
       final next = await ref
           .read(apiClientProvider)
@@ -272,21 +277,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             map: (json) => PatternsPage.fromJson(json as Map<String, dynamic>),
           );
       if (!mounted) return;
-      final seen = current.patterns.map((pattern) => pattern.id).toSet();
-      final appended = next.patterns
-          .where((pattern) => !seen.contains(pattern.id))
-          .toList();
       setState(() {
-        _focusedPage = PatternsPage(
-          patterns: [...current.patterns, ...appended],
-          hasMore: next.hasMore,
-          nextOffset: next.nextOffset,
-          rankOffset: current.rankOffset,
-        );
+        _focusedPage = appendFocusedBoardPage(current, next);
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _focusedPage = current.copyWith(loadingMore: false));
+      setState(
+        () => _focusedPage = current.copyWith(
+          loadingMore: false,
+          loadMoreFailed: true,
+        ),
+      );
     }
   }
 
@@ -444,6 +445,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _onCategoryChanged(String value) {
     final next = value == 'all' ? null : value;
+    rememberRankBoardCategory(ref, value);
     if (_rankFocusMode) {
       // Match web CategoryBar: category links do not carry freeOnly.
       context.go(
@@ -474,11 +476,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _onFreeOnlyChanged(bool value) {
     if (_rankFocusMode) {
       context.go(
-        _rankBoardLocation(
-          category: category,
-          period: period,
-          freeOnly: value,
-        ),
+        _rankBoardLocation(category: category, period: period, freeOnly: value),
       );
       return;
     }
@@ -504,6 +502,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final profile = ref.watch(profileProvider).valueOrNull;
     final constants = AppConstants.instance;
+    final rememberedCategory = ref.watch(rememberedRankBoardCategoryProvider);
 
     if (!_categoryInitialized) {
       final session = ref.read(sessionProvider);
@@ -511,12 +510,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         category = null;
         _categoryInitialized = true;
       } else if (session == null) {
-        category ??= constants.defaultRankBoardCategory;
+        category = constants.defaultRankBoardCategory == 'all'
+            ? null
+            : constants.defaultRankBoardCategory;
         _categoryInitialized = true;
       } else if (profile != null) {
-        final defaultSlug =
-            profile.defaultCategorySlug ?? constants.defaultUserCategory;
-        category = defaultSlug == 'all' ? null : defaultSlug;
+        final lastSlug = preferredRankBoardCategory(
+          rememberedCategory: rememberedCategory,
+          profileCategory: profile.lastRankBoardCategorySlug,
+          fallback: constants.defaultRankBoardCategory,
+        );
+        category = lastSlug == 'all' ? null : lastSlug;
         _categoryInitialized = true;
       }
     }
@@ -627,6 +631,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             _buildSinglePatternResults(constants)
           else if (_rankFocusMode)
             _buildFocusedBoard()
+          else if (!_categoryInitialized)
+            const Column(
+              children: [
+                PatternCardSkeleton(),
+                SizedBox(height: 12),
+                PatternCardSkeleton(),
+                SizedBox(height: 12),
+                PatternCardSkeleton(),
+              ],
+            )
           else
             _buildSearchOrRankResults(query, constants),
         ],
@@ -670,12 +684,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
       error: (e, _) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 48),
-        child: Center(
-          child: Text(
-            'Could not load patterns\n$e',
-            textAlign: TextAlign.center,
-          ),
-        ),
+        child: _isSearching
+            ? Center(
+                child: Text(
+                  'Could not load patterns\n$e',
+                  textAlign: TextAlign.center,
+                ),
+              )
+            : RankBoardRecovery(
+                onTryAgain: () => ref.invalidate(patternsProvider(query)),
+              ),
       ),
       data: (page) {
         if (page.patterns.isEmpty) {
@@ -711,6 +729,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildFocusedBoard() {
+    if (_focusError != null) {
+      return RankBoardRecovery(onTryAgain: _loadFocusedBoard);
+    }
     if (_focusLoading || _focusedPage == null) {
       return const Column(
         children: [
@@ -765,9 +786,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ? _focusKey
                 : ValueKey(page.patterns[i].id),
             pattern: page.patterns[i],
-            // Match web PatternGrid: prefer board rank from the API so free-only
-            // keeps real period/all-time positions instead of reindexing 1..n.
-            rank: page.patterns[i].allTimeRank ?? (page.rankOffset + i + 1),
+            rank: resolveRankBoardRank(
+              rankOffset: page.rankOffset,
+              index: i,
+              freeOnly: freeOnly,
+              allTimeRank: page.patterns[i].allTimeRank,
+            ),
             rankPeriod: period,
             showRank: showRank,
             animateEntrance: animateEntrance,
@@ -799,9 +823,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Center(child: CircularProgressIndicator()),
           )
+        else if (page.loadMoreFailed)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: OutlinedButton(
+              onPressed: () => boardQuery == null
+                  ? _loadMoreFocused()
+                  : ref.read(patternsProvider(boardQuery).notifier).loadMore(),
+              child: const Text('Try again'),
+            ),
+          )
         else if (showSubmitInvite && !page.hasMore)
           const SubmitInviteCard(),
       ],
+    );
+  }
+}
+
+class RankBoardRecovery extends StatelessWidget {
+  const RankBoardRecovery({super.key, required this.onTryAgain});
+
+  final VoidCallback onTryAgain;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'We couldn’t load the rank board',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Patterns are still there. Please try again in a moment.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.muted),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton(onPressed: onTryAgain, child: const Text('Try again')),
+        ],
+      ),
     );
   }
 }
@@ -831,7 +895,7 @@ class _PeriodLink extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                 color: selected ? AppColors.foreground : AppColors.muted,
               ),
             ),

@@ -47,7 +47,9 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
   @override
   void initState() {
     super.initState();
-    _category = AppConstants.instance.defaultRankBoardCategory;
+    // Pattern submission requires a concrete category; rank-board "all" is
+    // not a valid pattern category.
+    _category = AppConstants.instance.categories.first.slug;
   }
 
   @override
@@ -357,11 +359,11 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
 
   Future<void> _pickPdf() async {
     if (!_isFree) return;
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
     );
-    final path = result?.files.single.path;
+    final path = result.isEmpty ? null : result.single.path;
     if (path == null) return;
     final file = File(path);
     if (file.lengthSync() > AppConstants.instance.maxPdfBytes) {

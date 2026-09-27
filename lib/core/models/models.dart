@@ -7,6 +7,8 @@ class PatternCard {
   final String? patternUrl;
   final bool isFree;
   final bool hasPdf;
+
+  /// All-time total supplied by the API, even when a launch-window period is selected.
   final int voteCount;
   final bool voted;
   final String createdAt;
@@ -50,11 +52,7 @@ class PatternCard {
     );
   }
 
-  PatternCard copyWith({
-    int? voteCount,
-    bool? voted,
-    bool? saved,
-  }) {
+  PatternCard copyWith({int? voteCount, bool? voted, bool? saved}) {
     return PatternCard(
       id: id,
       title: title,
@@ -79,6 +77,8 @@ class PatternsPage {
   final bool hasMore;
   final int? nextOffset;
   final bool loadingMore;
+  final bool loadMoreFailed;
+
   /// Index of the first pattern on this page (0 for the top of the board).
   final int rankOffset;
 
@@ -87,6 +87,7 @@ class PatternsPage {
     required this.hasMore,
     required this.nextOffset,
     this.loadingMore = false,
+    this.loadMoreFailed = false,
     this.rankOffset = 0,
   });
 
@@ -106,6 +107,7 @@ class PatternsPage {
     bool? hasMore,
     int? nextOffset,
     bool? loadingMore,
+    bool? loadMoreFailed,
     int? rankOffset,
   }) {
     return PatternsPage(
@@ -113,6 +115,7 @@ class PatternsPage {
       hasMore: hasMore ?? this.hasMore,
       nextOffset: nextOffset ?? this.nextOffset,
       loadingMore: loadingMore ?? this.loadingMore,
+      loadMoreFailed: loadMoreFailed ?? this.loadMoreFailed,
       rankOffset: rankOffset ?? this.rankOffset,
     );
   }
@@ -123,7 +126,7 @@ class UserProfile {
   final String? displayName;
   final String role;
   final bool isPatternDesigner;
-  final String? defaultCategorySlug;
+  final String? lastRankBoardCategorySlug;
   final String? email;
   final bool hasSubmittedPatterns;
   final bool isFoundingMember;
@@ -133,7 +136,7 @@ class UserProfile {
     this.displayName,
     required this.role,
     required this.isPatternDesigner,
-    this.defaultCategorySlug,
+    this.lastRankBoardCategorySlug,
     this.email,
     this.hasSubmittedPatterns = false,
     this.isFoundingMember = false,
@@ -145,7 +148,7 @@ class UserProfile {
       displayName: json['displayName'] as String?,
       role: json['role'] as String? ?? 'designer',
       isPatternDesigner: json['isPatternDesigner'] as bool? ?? false,
-      defaultCategorySlug: json['defaultCategorySlug'] as String?,
+      lastRankBoardCategorySlug: json['lastRankBoardCategorySlug'] as String?,
       email: json['email'] as String?,
       hasSubmittedPatterns: json['hasSubmittedPatterns'] as bool? ?? false,
       isFoundingMember: json['isFoundingMember'] as bool? ?? false,
@@ -158,7 +161,11 @@ class BoardSummary {
   final String name;
   final String createdAt;
 
-  const BoardSummary({required this.id, required this.name, required this.createdAt});
+  const BoardSummary({
+    required this.id,
+    required this.name,
+    required this.createdAt,
+  });
 
   factory BoardSummary.fromJson(Map<String, dynamic> json) {
     return BoardSummary(
@@ -218,13 +225,23 @@ class CreatorProfile {
     this.boardRanks = const {},
   });
 
+  /// Creator collections are not scoreboards; their list positions are never ranks.
+  int? allTimeRankFor(PatternCard pattern) {
+    final boardRank = boardRanks[pattern.id]?.all;
+    if (boardRank != null && boardRank > 0) return boardRank;
+    final cardRank = pattern.allTimeRank;
+    return cardRank != null && cardRank > 0 ? cardRank : null;
+  }
+
   factory CreatorProfile.fromJson(Map<String, dynamic> json) {
     final ranksRaw = json['boardRanks'];
     final ranks = <String, PatternBoardRanks>{};
     if (ranksRaw is Map) {
       for (final entry in ranksRaw.entries) {
         if (entry.value is Map<String, dynamic>) {
-          ranks[entry.key.toString()] = PatternBoardRanks.fromJson(entry.value as Map<String, dynamic>);
+          ranks[entry.key.toString()] = PatternBoardRanks.fromJson(
+            entry.value as Map<String, dynamic>,
+          );
         }
       }
     }
@@ -334,7 +351,9 @@ class DesignerInsights {
       totalSaves: _asInt(json['totalSaves']) ?? 0,
       totalCtaClicks: _asInt(json['totalCtaClicks']) ?? 0,
       patterns: (json['patterns'] as List<dynamic>? ?? [])
-          .map((e) => DesignerPatternInsight.fromJson(e as Map<String, dynamic>))
+          .map(
+            (e) => DesignerPatternInsight.fromJson(e as Map<String, dynamic>),
+          )
           .toList(),
     );
   }
@@ -346,4 +365,3 @@ int? _asInt(dynamic value) {
   if (value is num) return value.toInt();
   return int.tryParse(value.toString());
 }
-

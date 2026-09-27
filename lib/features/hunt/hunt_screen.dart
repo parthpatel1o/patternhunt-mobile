@@ -96,7 +96,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
   _HuntPhase _phase = _HuntPhase.boot;
   String _category = 'all';
   String _order = 'random';
-  String _period = 'all';
+  String _period = kDefaultHuntPeriod;
   String _show = kDefaultHuntShowFilter;
   bool _freeOnly = false;
   String _seed = '';
@@ -145,7 +145,8 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     final profileCategory = ref
         .read(profileProvider)
         .valueOrNull
-        ?.defaultCategorySlug;
+        ?.lastRankBoardCategorySlug;
+    final rememberedCategory = ref.read(rememberedRankBoardCategoryProvider);
 
     if (run != null) {
       _category = run.category;
@@ -161,9 +162,13 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     }
 
     // Least friction (web parity): jump straight into a random hunt.
-    _category = profileCategory ?? constants.defaultHuntCategory;
+    _category = preferredRankBoardCategory(
+      rememberedCategory: rememberedCategory,
+      profileCategory: profileCategory,
+      fallback: constants.defaultHuntCategory,
+    );
     _order = constants.defaultHuntOrder;
-    _period = 'all';
+    _period = kDefaultHuntPeriod;
     _show = storedShow;
     // Match web: setup/default freeOnly starts false (preference written on apply).
     _freeOnly = false;
@@ -218,7 +223,12 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
               nextOffset: data['nextOffset'] as int?,
             );
           },
-        );
+        )
+      ..then((page) {
+        ref
+            .read(personalStateProvider.notifier)
+            .registerPatternIds(page.patterns.map((pattern) => pattern.id));
+      });
   }
 
   Future<void> _loadPage({
@@ -589,6 +599,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
 
   Future<void> _setCategory(String value) async {
     setState(() => _category = value);
+    rememberRankBoardCategory(ref, value);
     await _storage.writeCategory(value);
   }
 
@@ -743,7 +754,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
               label,
               style: TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w600,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                 color: AppColors.foreground,
               ),
             ),
@@ -1151,9 +1162,13 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
   @override
   void initState() {
     super.initState();
-    _voted = widget.pattern.voted;
-    _saved = widget.pattern.saved;
+    final personal = ref.read(personalPatternStateProvider(widget.pattern.id));
+    _voted = personal?.voted ?? widget.pattern.voted;
+    _saved = personal?.saved ?? widget.pattern.saved;
     _voteCount = widget.pattern.voteCount;
+    ref.read(personalStateProvider.notifier).registerPatternIds([
+      widget.pattern.id,
+    ]);
     _swipeHintController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1600),
@@ -1208,11 +1223,17 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     // across peek ↔ front (shared ValueKey).
     if (oldWidget.pattern.voted != widget.pattern.voted ||
         oldWidget.pattern.voteCount != widget.pattern.voteCount) {
-      _voted = widget.pattern.voted;
+      final personal = ref.read(
+        personalPatternStateProvider(widget.pattern.id),
+      );
+      _voted = personal?.voted ?? widget.pattern.voted;
       _voteCount = widget.pattern.voteCount;
     }
     if (oldWidget.pattern.saved != widget.pattern.saved) {
-      _saved = widget.pattern.saved;
+      final personal = ref.read(
+        personalPatternStateProvider(widget.pattern.id),
+      );
+      _saved = personal?.saved ?? widget.pattern.saved;
     }
     // Role change: drop any mid-flight transform so a demoted card doesn't
     // sit off-screen in the peek stack, and a promoted peek starts clean.
@@ -1328,19 +1349,25 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     final oldCount = _voteCount;
     final onVoteChange = widget.onVoteChange;
     final patternId = widget.pattern.id;
+    final desiredVoted = !oldVoted;
+    final personal = ref.read(personalPatternStateProvider(patternId));
+    final generation = ref
+        .read(personalStateProvider.notifier)
+        .optimisticallySetVote(
+          patternId,
+          desiredVoted,
+          saved: personal?.saved ?? _saved,
+        );
     setState(() {
       _voting = true;
-      _voted = !_voted;
+      _voted = desiredVoted;
       _voteCount = (_voteCount + (_voted ? 1 : -1)).clamp(0, 1 << 30);
     });
     onVoteChange?.call(patternId, _voted, _voteCount);
     try {
       final response = await ref
           .read(apiClientProvider)
-          .post(
-            '/patterns/$patternId/vote',
-            query: widget.period == 'all' ? null : {'period': widget.period},
-          );
+          .votePattern(patternId, desiredVoted);
       final voted = response['voted'] as bool? ?? _voted;
       final voteCount = (response['voteCount'] as num?)?.toInt() ?? _voteCount;
       if (mounted) {
@@ -1350,6 +1377,9 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         });
       }
       onVoteChange?.call(patternId, voted, voteCount);
+      ref
+          .read(personalStateProvider.notifier)
+          .confirmVote(patternId, generation, voted, voteCount);
     } on ApiException catch (error) {
       if (mounted) {
         setState(() {
@@ -1359,6 +1389,9 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         _showError(error.message);
       }
       onVoteChange?.call(patternId, oldVoted, oldCount);
+      ref
+          .read(personalStateProvider.notifier)
+          .rollbackVote(patternId, generation, oldVoted, saved: _saved);
     } finally {
       if (mounted) setState(() => _voting = false);
     }
@@ -1392,7 +1425,14 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     final oldCount = _voteCount;
     final onVoteChange = widget.onVoteChange;
     final patternId = widget.pattern.id;
-    final period = widget.period;
+    final personal = ref.read(personalPatternStateProvider(patternId));
+    final generation = ref
+        .read(personalStateProvider.notifier)
+        .optimisticallySetVote(
+          patternId,
+          true,
+          saved: personal?.saved ?? _saved,
+        );
     setState(() {
       _voting = true;
       _voted = true;
@@ -1404,10 +1444,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     try {
       final response = await ref
           .read(apiClientProvider)
-          .post(
-            '/patterns/$patternId/vote',
-            query: period == 'all' ? null : {'period': period},
-          );
+          .votePattern(patternId, true);
       final voted = response['voted'] as bool? ?? true;
       final voteCount = (response['voteCount'] as num?)?.toInt() ?? _voteCount;
       if (mounted) {
@@ -1417,6 +1454,9 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         });
       }
       onVoteChange?.call(patternId, voted, voteCount);
+      ref
+          .read(personalStateProvider.notifier)
+          .confirmVote(patternId, generation, voted, voteCount);
     } on ApiException catch (error) {
       if (mounted) {
         setState(() {
@@ -1426,6 +1466,9 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         _showError(error.message);
       }
       onVoteChange?.call(patternId, oldVoted, oldCount);
+      ref
+          .read(personalStateProvider.notifier)
+          .rollbackVote(patternId, generation, oldVoted, saved: _saved);
     } finally {
       if (mounted) setState(() => _voting = false);
     }
@@ -1438,6 +1481,14 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       return;
     }
     final oldSaved = _saved;
+    final personal = ref.read(personalPatternStateProvider(widget.pattern.id));
+    final generation = ref
+        .read(personalStateProvider.notifier)
+        .optimisticallySetSaved(
+          widget.pattern.id,
+          !oldSaved,
+          voted: personal?.voted ?? _voted,
+        );
     setState(() {
       _saving = true;
       _saved = !_saved;
@@ -1457,6 +1508,9 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       }
       invalidatePatternSaveState(ref, widget.pattern.id);
       if (_saved) prefetchBoardSaveOptions(ref, widget.pattern.id);
+      ref
+          .read(personalStateProvider.notifier)
+          .confirmSaved(widget.pattern.id, generation, _saved);
     } on ApiException catch (error) {
       if (mounted) {
         setState(() => _saved = oldSaved);
@@ -1465,6 +1519,14 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         }
         _showError(error.message);
       }
+      ref
+          .read(personalStateProvider.notifier)
+          .rollbackSaved(
+            widget.pattern.id,
+            generation,
+            oldSaved,
+            voted: _voted,
+          );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -1913,6 +1975,18 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<PersonalPatternState?>(
+      personalPatternStateProvider(widget.pattern.id),
+      (previous, next) {
+        if (next == null || _voting || _saving || !mounted) return;
+        if (next.voted != _voted || next.saved != _saved) {
+          setState(() {
+            _voted = next.voted;
+            _saved = next.saved;
+          });
+        }
+      },
+    );
     final pattern = widget.pattern;
     final images = pattern.imageUrls;
     final download = !_isDemo && pattern.isFree && pattern.hasPdf;

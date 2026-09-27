@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 /// Default saved-patterns folder. Matches web `DEFAULT_BOARD_NAME`.
 const kDefaultBoardName = 'All';
+const kDefaultHuntPeriod = 'all';
 
 class CategoryOption {
   const CategoryOption({required this.slug, required this.name});
@@ -34,7 +35,7 @@ class AppConstants {
     required this.defaultHuntOrder,
     required this.defaultHuntCategory,
     required this.defaultRankBoardCategory,
-    required this.defaultUserCategory,
+    required this.defaultRankBoardPeriod,
     required this.maxPatternImages,
     required this.scoreboardPageSize,
     required this.huntPageSize,
@@ -48,7 +49,7 @@ class AppConstants {
   final String defaultHuntOrder;
   final String defaultHuntCategory;
   final String defaultRankBoardCategory;
-  final String defaultUserCategory;
+  final String defaultRankBoardPeriod;
   final int maxPatternImages;
   final int scoreboardPageSize;
   final int huntPageSize;
@@ -94,8 +95,10 @@ class AppConstants {
           .toList(),
       defaultHuntOrder: json['defaultHuntOrder'] as String? ?? 'random',
       defaultHuntCategory: json['defaultHuntCategory'] as String? ?? 'all',
-      defaultRankBoardCategory: json['defaultRankBoardCategory'] as String,
-      defaultUserCategory: json['defaultUserCategory'] as String,
+      defaultRankBoardCategory:
+          json['defaultRankBoardCategory'] as String? ?? 'all',
+      defaultRankBoardPeriod:
+          json['defaultRankBoardPeriod'] as String? ?? 'week',
       maxPatternImages: json['maxPatternImages'] as int,
       scoreboardPageSize: json['scoreboardPageSize'] as int? ?? 20,
       huntPageSize: json['huntPageSize'] as int? ?? 20,

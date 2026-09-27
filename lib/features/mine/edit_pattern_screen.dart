@@ -69,7 +69,9 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
   @override
   void initState() {
     super.initState();
-    _category = AppConstants.instance.defaultRankBoardCategory;
+    // Pattern editing requires a concrete category; rank-board "all" is not
+    // a valid pattern category.
+    _category = AppConstants.instance.categories.first.slug;
     _load();
   }
 
@@ -115,7 +117,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
         final categories = AppConstants.instance.categories;
         _category = categories.any((c) => c.slug == loadedCategory)
             ? loadedCategory!
-            : AppConstants.instance.defaultRankBoardCategory;
+            : AppConstants.instance.categories.first.slug;
         _hasPdf = data['hasPdf'] == true;
         _createdAt = data['createdAt'] as String?;
         _photos

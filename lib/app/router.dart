@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../core/auth/login_redirect.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_motion.dart';
@@ -17,6 +18,7 @@ import '../../features/insights/insights_screen.dart';
 import '../../features/profile/creator_screen.dart';
 import '../../features/saved/board_detail_screen.dart';
 import '../../features/saved/saved_screen.dart';
+import '../../features/upvotes/my_upvotes_screen.dart';
 import '../../features/search/search_screen.dart';
 import '../../features/settings/profile_screen.dart';
 import '../../features/settings/settings_screen.dart';
@@ -48,10 +50,7 @@ final _routerRefreshProvider = Provider<_RouterRefresh>((ref) {
   return notifier;
 });
 
-Page<void> _fadePage({
-  required LocalKey key,
-  required Widget child,
-}) {
+Page<void> _fadePage({required LocalKey key, required Widget child}) {
   return CustomTransitionPage<void>(
     key: key,
     child: child,
@@ -84,7 +83,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/reset-password';
       }
       if (session == null &&
-          (['/submit', '/saved', '/mine', '/insights', '/settings'].contains(state.matchedLocation) ||
+          ([
+                '/submit',
+                '/saved',
+                '/upvotes',
+                '/mine',
+                '/insights',
+                '/settings',
+              ].contains(state.matchedLocation) ||
               state.matchedLocation.startsWith('/mine/') ||
               state.matchedLocation.startsWith('/saved/'))) {
         return loginLocation(next: state.uri.toString());
@@ -95,7 +101,8 @@ final routerProvider = Provider<GoRouter>((ref) {
               state.matchedLocation.startsWith('/mine/'))) {
         final profileAsync = ref.read(profileProvider);
         if (profileAsync.isLoading) return null;
-        if (profileAsync.valueOrNull != null && !profileAsync.valueOrNull!.isPatternDesigner) {
+        if (profileAsync.valueOrNull != null &&
+            !profileAsync.valueOrNull!.isPatternDesigner) {
           return '/profile';
         }
       }
@@ -144,10 +151,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/hunt',
-                pageBuilder: (context, state) => _fadePage(
-                  key: state.pageKey,
-                  child: const HuntScreen(),
-                ),
+                pageBuilder: (context, state) =>
+                    _fadePage(key: state.pageKey, child: const HuntScreen()),
               ),
             ],
           ),
@@ -155,10 +160,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/saved',
-                pageBuilder: (context, state) => _fadePage(
-                  key: state.pageKey,
-                  child: const SavedScreen(),
-                ),
+                pageBuilder: (context, state) =>
+                    _fadePage(key: state.pageKey, child: const SavedScreen()),
               ),
             ],
           ),
@@ -166,10 +169,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/mine',
-                pageBuilder: (context, state) => _fadePage(
-                  key: state.pageKey,
-                  child: const MineScreen(),
-                ),
+                pageBuilder: (context, state) =>
+                    _fadePage(key: state.pageKey, child: const MineScreen()),
               ),
             ],
           ),
@@ -177,9 +178,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/profile',
+                pageBuilder: (context, state) =>
+                    _fadePage(key: state.pageKey, child: const ProfileScreen()),
+              ),
+              GoRoute(
+                path: '/upvotes',
                 pageBuilder: (context, state) => _fadePage(
                   key: state.pageKey,
-                  child: const ProfileScreen(),
+                  child: const MyUpvotesScreen(),
                 ),
               ),
             ],
@@ -188,10 +194,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/submit',
-                pageBuilder: (context, state) => _fadePage(
-                  key: state.pageKey,
-                  child: const SubmitScreen(),
-                ),
+                pageBuilder: (context, state) =>
+                    _fadePage(key: state.pageKey, child: const SubmitScreen()),
               ),
             ],
           ),
@@ -243,18 +247,24 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
-      GoRoute(path: '/search', builder: (context, state) => const SearchScreen()),
+      GoRoute(
+        path: '/search',
+        builder: (context, state) => const SearchScreen(),
+      ),
       GoRoute(
         path: '/mine/:id/edit',
-        builder: (context, state) => EditPatternScreen(patternId: state.pathParameters['id']!),
+        builder: (context, state) =>
+            EditPatternScreen(patternId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/saved/:boardId',
-        builder: (context, state) => BoardDetailScreen(boardId: state.pathParameters['boardId']!),
+        builder: (context, state) =>
+            BoardDetailScreen(boardId: state.pathParameters['boardId']!),
       ),
       GoRoute(
         path: '/creator/:slug',
-        builder: (context, state) => CreatorScreen(slug: state.pathParameters['slug']!),
+        builder: (context, state) =>
+            CreatorScreen(slug: state.pathParameters['slug']!),
       ),
     ],
   );

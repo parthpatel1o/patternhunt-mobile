@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
@@ -44,7 +45,8 @@ Future<void> showAccountMenu(BuildContext context, WidgetRef ref) async {
                   padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                   child: Text(
                     email,
-                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+                    style: Theme.of(ctx).textTheme.bodySmall
+                        ?.copyWith(color: AppColors.muted),
                   ),
                 ),
               if (isDesigner) ...[
@@ -71,6 +73,14 @@ Future<void> showAccountMenu(BuildContext context, WidgetRef ref) async {
                 onTap: () {
                   Navigator.pop(ctx);
                   context.go('/saved');
+                },
+              ),
+              _MenuTile(
+                icon: Icons.arrow_upward_rounded,
+                label: 'My upvotes',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  context.go('/upvotes');
                 },
               ),
               _MenuTile(

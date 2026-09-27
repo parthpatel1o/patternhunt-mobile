@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../core/auth/login_redirect.dart';
 import '../../core/auth/signup_welcome.dart';
 import '../../core/config/env.dart';
@@ -115,7 +118,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           password: _password.text,
         );
         if (response.session == null) {
-          setState(() => _error = 'Could not start a session. Check your email is confirmed.');
+          setState(
+            () => _error =
+                'Could not start a session. Check your email is confirmed.',
+          );
           return;
         }
       }
@@ -157,6 +163,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Future<void> _appleSignIn() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [AppleIDAuthorizationScopes.email],
+      );
+      final identityToken = credential.identityToken;
+      if (identityToken == null) {
+        throw const AuthException('Apple did not return an identity token.');
+      }
+      await Supabase.instance.client.auth.signInWithIdToken(
+        provider: OAuthProvider.apple,
+        idToken: identityToken,
+      );
+    } on AuthException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   Widget _buildEmailSuccess({
     required String title,
     required String body,
@@ -164,10 +194,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     required VoidCallback onBack,
     String buttonLabel = 'Back to log in',
   }) {
-    final titleStyle = Theme.of(context).textTheme.titleLarge?.copyWith(
-      fontWeight: FontWeight.w700,
-      color: AppColors.foreground,
-    );
+    final titleStyle = Theme.of(context).textTheme.titleLarge
+        ?.copyWith(fontWeight: FontWeight.w700, color: AppColors.foreground);
 
     return SafeArea(
       child: ListView(
@@ -180,7 +208,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               color: AppColors.primary.withValues(alpha: 0.35),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Icon(Icons.mark_email_read_outlined, size: 32, color: AppColors.accent),
+            child: const Icon(
+              Icons.mark_email_read_outlined,
+              size: 32,
+              color: AppColors.accent,
+            ),
           ),
           const SizedBox(height: 24),
           Text(title, style: titleStyle),
@@ -189,7 +221,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           const SizedBox(height: 8),
           Text(
             hint,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: AppColors.muted),
           ),
           const SizedBox(height: 32),
           FilledButton(onPressed: onBack, child: Text(buttonLabel)),
@@ -210,7 +243,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               color: AppColors.primary.withValues(alpha: 0.35),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Icon(Icons.mark_email_read_outlined, size: 32, color: AppColors.accent),
+            child: const Icon(
+              Icons.mark_email_read_outlined,
+              size: 32,
+              color: AppColors.accent,
+            ),
           ),
           const SizedBox(height: 24),
           Text(
@@ -226,7 +263,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 32),
-          FilledButton(onPressed: _resetSignupSuccess, child: const Text('Got it')),
+          FilledButton(
+            onPressed: _resetSignupSuccess,
+            child: const Text('Got it'),
+          ),
         ],
       ),
     );
@@ -235,7 +275,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget _buildForgotSuccess() {
     return _buildEmailSuccess(
       title: 'Check your email',
-      body: 'If an account exists for $_forgotSuccessEmail, we sent a password reset link.',
+      body:
+          'If an account exists for $_forgotSuccessEmail, we sent a password reset link.',
       hint: 'Open the link in that email to choose a new password.',
       onBack: _resetForgotSuccess,
     );
@@ -265,7 +306,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     final subtitle = switch (_mode) {
       _AuthMode.login => 'Login to vote and save patterns.',
-      _AuthMode.signup => 'Join Pattern Hunt to vote, save favourites, and submit patterns.',
+      _AuthMode.signup =>
+        'Join Pattern Hunt to vote, save favourites, and submit patterns.',
       _AuthMode.forgot => 'Enter your email and we’ll send a reset link.',
     };
 
@@ -273,187 +315,229 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, _loginTopInset, 20, 40),
         children: [
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          subtitle,
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
-        ),
-        const SizedBox(height: 20),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.border),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.accent.withValues(alpha: 0.08),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineSmall
+                ?.copyWith(fontWeight: FontWeight.w700),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_mode != _AuthMode.forgot) ...[
-                OutlinedButton(
-                  onPressed: _loading ? null : _googleSignIn,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.foreground,
-                    side: const BorderSide(color: AppColors.border),
-                    shape: const StadiumBorder(),
-                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: GoogleLogo(size: 20),
-                      ),
-                      SizedBox(width: 12),
-                      Text('Continue with Google'),
-                    ],
-                  ),
+          const SizedBox(height: 8),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: AppColors.muted),
+          ),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.accent.withValues(alpha: 0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Expanded(child: Divider()),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: Text(
-                        'OR EMAIL',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: AppColors.muted,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.6,
-                            ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_mode != _AuthMode.forgot) ...[
+                  if (!kIsWeb &&
+                      defaultTargetPlatform == TargetPlatform.iOS) ...[
+                    OutlinedButton(
+                      onPressed: _loading ? null : _appleSignIn,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.foreground,
+                        side: const BorderSide(color: AppColors.border),
+                        shape: const StadiumBorder(),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 14,
+                          horizontal: 16,
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.apple, size: 22),
+                          SizedBox(width: 12),
+                          Text('Continue with Apple'),
+                        ],
                       ),
                     ),
-                    const Expanded(child: Divider()),
+                    const SizedBox(height: 12),
                   ],
-                ),
-                const SizedBox(height: 16),
-              ],
-              TextField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-              ),
-              if (_mode != _AuthMode.forgot) ...[
-                const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: _loading ? null : _googleSignIn,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.foreground,
+                      side: const BorderSide(color: AppColors.border),
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 16,
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: GoogleLogo(size: 20),
+                        ),
+                        SizedBox(width: 12),
+                        Text('Continue with Google'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Expanded(child: Divider()),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Text(
+                          'OR EMAIL',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: AppColors.muted,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.6,
+                              ),
+                        ),
+                      ),
+                      const Expanded(child: Divider()),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 TextField(
-                  controller: _password,
-                  obscureText: true,
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
-                    labelText: 'Password',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                    labelText: 'Email',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                 ),
-                if (_mode == _AuthMode.login)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _loading
-                          ? null
-                          : () => setState(() {
+                if (_mode != _AuthMode.forgot) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _password,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                  if (_mode == _AuthMode.login)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _loading
+                            ? null
+                            : () => setState(() {
                                 _mode = _AuthMode.forgot;
                                 _error = null;
                               }),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        foregroundColor: AppColors.muted,
-                        textStyle: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 4,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          foregroundColor: AppColors.muted,
+                          textStyle: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
+                        child: const Text('Forgot password?'),
                       ),
-                      child: const Text('Forgot password?'),
                     ),
+                ],
+                if (_mode == _AuthMode.signup) ...[
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Register as a pattern designer'),
+                    value: _designer,
+                    onChanged: (v) => setState(() => _designer = v),
                   ),
-              ],
-              if (_mode == _AuthMode.signup) ...[
-                const SizedBox(height: 12),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Register as a pattern designer'),
-                  value: _designer,
-                  onChanged: (v) => setState(() => _designer = v),
-                ),
-                if (_designer) ...[
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _name,
-                    maxLength: 80,
-                    decoration: InputDecoration(
-                      labelText: 'Designer name',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                      counterText: '',
+                  if (_designer) ...[
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _name,
+                      maxLength: 80,
+                      decoration: InputDecoration(
+                        labelText: 'Designer name',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        counterText: '',
+                      ),
                     ),
+                  ],
+                ],
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: AppColors.destructive),
                   ),
                 ],
-              ],
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(_error!, style: const TextStyle(color: AppColors.destructive)),
-              ],
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: _loading ? null : _submit,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: AppColors.foreground,
-                  shape: const StadiumBorder(),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: _loading ? null : _submit,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.foreground,
+                    shape: const StadiumBorder(),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: Text(
+                    _loading
+                        ? 'Please wait…'
+                        : switch (_mode) {
+                            _AuthMode.login => 'Log in',
+                            _AuthMode.signup => 'Sign up',
+                            _AuthMode.forgot => 'Send reset link',
+                          },
+                  ),
                 ),
-                child: Text(
-                  _loading
-                      ? 'Please wait…'
-                      : switch (_mode) {
-                          _AuthMode.login => 'Log in',
-                          _AuthMode.signup => 'Sign up',
-                          _AuthMode.forgot => 'Send reset link',
-                        },
-                ),
-              ),
-              TextButton(
-                onPressed: _loading
-                    ? null
-                    : () => setState(() {
-                        if (_mode == _AuthMode.forgot) {
-                          _mode = _AuthMode.login;
-                        } else {
-                          _mode = _mode == _AuthMode.signup ? _AuthMode.login : _AuthMode.signup;
-                        }
-                        _error = null;
-                      }),
-                child: Text(
-                  switch (_mode) {
+                TextButton(
+                  onPressed: _loading
+                      ? null
+                      : () => setState(() {
+                          if (_mode == _AuthMode.forgot) {
+                            _mode = _AuthMode.login;
+                          } else {
+                            _mode = _mode == _AuthMode.signup
+                                ? _AuthMode.login
+                                : _AuthMode.signup;
+                          }
+                          _error = null;
+                        }),
+                  child: Text(switch (_mode) {
                     _AuthMode.login => 'Need an account? Sign up',
                     _AuthMode.signup => 'Already have an account? Log in',
                     _AuthMode.forgot => 'Back to log in',
-                  },
-                  style: TextStyle(color: AppColors.muted),
+                  }, style: TextStyle(color: AppColors.muted)),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         ],
       ),
     );

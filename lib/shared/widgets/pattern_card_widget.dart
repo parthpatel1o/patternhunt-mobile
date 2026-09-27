@@ -75,6 +75,9 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
     super.initState();
     _imageController = PageController();
     _syncFromPattern();
+    ref.read(personalStateProvider.notifier).registerPatternIds([
+      widget.pattern.id,
+    ]);
     if (widget.highlight) _startHighlight();
   }
 
@@ -99,6 +102,9 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
       _saved = widget.pattern.saved;
     }
     if (oldWidget.pattern.id != widget.pattern.id) {
+      ref.read(personalStateProvider.notifier).registerPatternIds([
+        widget.pattern.id,
+      ]);
       _imageIndex = 0;
       if (_imageController.hasClients) {
         _imageController.jumpToPage(0);
@@ -119,13 +125,11 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
   }
 
   void _syncFromPattern() {
-    _saved = widget.pattern.saved;
-    _voted = widget.pattern.voted;
+    final personal = ref.read(personalPatternStateProvider(widget.pattern.id));
+    _saved = personal?.saved ?? widget.pattern.saved;
+    _voted = personal?.voted ?? widget.pattern.voted;
     _voteCount = widget.pattern.voteCount;
   }
-
-  Map<String, dynamic>? get _voteQuery =>
-      widget.rankPeriod == 'all' ? null : {'period': widget.rankPeriod};
 
   bool get _onPodium => widget.showRank && widget.rank <= 3;
 
@@ -273,25 +277,53 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
     final previousCount = _voteCount;
     final nextVoted = !_voted;
     final nextCount = (_voteCount + (nextVoted ? 1 : -1)).clamp(0, 1 << 30);
+    final personal = ref.read(personalPatternStateProvider(widget.pattern.id));
+    final personalState = ref.read(personalStateProvider.notifier);
+    final voteChange = widget.onVoteChange;
+    final patternId = widget.pattern.id;
+    final generation = personalState.optimisticallySetVote(
+      patternId,
+      nextVoted,
+      saved: personal?.saved ?? _saved,
+    );
     // Optimistic update + parent re-sort (web VoteButton.applyLocal).
     _applyVoteLocal(nextVoted, nextCount);
     setState(() => _voting = true);
     try {
       final api = ref.read(apiClientProvider);
-      final result = await api.post(
-        '/patterns/${widget.pattern.id}/vote',
-        query: _voteQuery,
-      );
+      final result = await api.votePattern(patternId, nextVoted);
       final voted = result['voted'] as bool?;
       final voteCount = result['voteCount'] as num?;
       if (voted != null && voteCount != null && mounted) {
         _applyVoteLocal(voted, voteCount.toInt());
       }
+      if (voted != null && voteCount != null) {
+        personalState.confirmVote(
+          patternId,
+          generation,
+          voted,
+          voteCount.toInt(),
+        );
+      }
     } on ApiException catch (e) {
       if (mounted) {
         _applyVoteLocal(previousVoted, previousCount);
         showAppSnackBar(context, message: e.message);
+      } else {
+        // Collection screens may remove this card optimistically. They still
+        // need the rollback notification after this State has been disposed.
+        if (voteChange != null) {
+          scheduleMicrotask(
+            () => voteChange(patternId, previousVoted, previousCount),
+          );
+        }
       }
+      personalState.rollbackVote(
+        patternId,
+        generation,
+        previousVoted,
+        saved: _saved,
+      );
     } finally {
       if (mounted) setState(() => _voting = false);
     }
@@ -302,6 +334,10 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
       _voted = voted;
       _voteCount = voteCount;
     });
+    _notifyVoteChange(voted, voteCount);
+  }
+
+  void _notifyVoteChange(bool voted, int voteCount) {
     // Defer parent re-sort so we don't setState an ancestor mid-child setState.
     final notify = widget.onVoteChange;
     if (notify == null) return;
@@ -316,6 +352,14 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
     }
     setState(() => _saving = true);
     final previous = _saved;
+    final personal = ref.read(personalPatternStateProvider(widget.pattern.id));
+    final generation = ref
+        .read(personalStateProvider.notifier)
+        .optimisticallySetSaved(
+          widget.pattern.id,
+          !previous,
+          voted: personal?.voted ?? _voted,
+        );
     try {
       final api = ref.read(apiClientProvider);
       if (_saved) {
@@ -335,12 +379,23 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
       }
       invalidatePatternSaveState(ref, widget.pattern.id);
       if (_saved) prefetchBoardSaveOptions(ref, widget.pattern.id);
+      ref
+          .read(personalStateProvider.notifier)
+          .confirmSaved(widget.pattern.id, generation, _saved);
     } on ApiException catch (e) {
       if (mounted) {
         setState(() => _saved = previous);
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         showAppSnackBar(context, message: e.message);
       }
+      ref
+          .read(personalStateProvider.notifier)
+          .rollbackSaved(
+            widget.pattern.id,
+            generation,
+            previous,
+            voted: _voted,
+          );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -349,6 +404,65 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
   Future<void> _openSaveSheet() async {
     await showSaveBoardSheet(context, ref, widget.pattern.id);
     invalidatePatternSaveState(ref, widget.pattern.id);
+  }
+
+  Future<void> _openReportSheet() async {
+    if (ref.read(sessionProvider) == null) {
+      if (mounted) context.go(loginLocationFor(context));
+      return;
+    }
+    final reason = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Report pattern',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              const Text('Tell us why this pattern needs review.'),
+              const SizedBox(height: 12),
+              for (final item in const <(String, String)>[
+                ('copyright', 'Copyright or trademark issue'),
+                ('sexual_content', 'Sexual or inappropriate content'),
+                ('hate_or_harassment', 'Hate, harassment, or bullying'),
+                ('violence_or_dangerous', 'Violence or dangerous content'),
+                ('spam_or_scams', 'Spam, scam, or misleading content'),
+                ('other', 'Other'),
+              ])
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(item.$2),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.pop(sheetContext, item.$1),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (reason == null) return;
+    try {
+      await ref
+          .read(apiClientProvider)
+          .post(
+            '/patterns/${widget.pattern.id}/report',
+            data: {'reason': reason},
+          );
+      if (mounted)
+        showAppSnackBar(
+          context,
+          message: 'Thanks — your report has been sent.',
+        );
+    } on ApiException catch (e) {
+      if (mounted) showAppSnackBar(context, message: e.message);
+    }
   }
 
   Future<void> _onCta() async {
@@ -397,6 +511,18 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<PersonalPatternState?>(
+      personalPatternStateProvider(widget.pattern.id),
+      (previous, next) {
+        if (next == null || _voting || _saving || !mounted) return;
+        if (next.voted != _voted || next.saved != _saved) {
+          setState(() {
+            _voted = next.voted;
+            _saved = next.saved;
+          });
+        }
+      },
+    );
     final pattern = widget.pattern;
     final (bg, border, borderWidth, shadows) = _rankStyle();
     final (badgeBg, badgeFg) = _rankBadgeColors();
@@ -423,6 +549,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
                   height: height,
                   child: GestureDetector(
                     onTap: _openGallery,
+                    onLongPress: _openReportSheet,
                     behavior: HitTestBehavior.opaque,
                     child: Container(
                       // Border + shadow on the outer shell so the frame is visible

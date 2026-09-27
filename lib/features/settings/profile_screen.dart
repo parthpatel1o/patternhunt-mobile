@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../../core/api/api_client.dart';
 import '../../core/config/env.dart';
 import '../../core/providers/providers.dart';
@@ -64,17 +65,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               isDesigner: isDesigner,
               isFoundingMember: isFoundingMember,
             ),
-            if (isDesigner) ...[
-              const SizedBox(height: 16),
-              const ProfileSectionLabel('Designer'),
-              const SizedBox(height: 8),
-              ProfileNavCard(
-                children: [
+            const SizedBox(height: 16),
+            const ProfileSectionLabel('Pages'),
+            const SizedBox(height: 8),
+            ProfileNavCard(
+              children: [
+                if (isDesigner)
                   ProfileNavTile(
                     icon: Icons.grid_view_rounded,
                     label: 'My patterns',
                     onTap: () => context.go('/mine'),
                   ),
+                ProfileNavTile(
+                  icon: Icons.arrow_upward_rounded,
+                  label: 'My upvotes',
+                  onTap: () => context.go('/upvotes'),
+                  showDividerAbove: isDesigner,
+                ),
+                if (isDesigner) ...[
                   ProfileNavTile(
                     icon: Icons.insights_outlined,
                     label: 'Insights',
@@ -88,8 +96,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     showDividerAbove: true,
                   ),
                 ],
-              ),
-            ],
+              ],
+            ),
             const SizedBox(height: 20),
             const ProfileSectionLabel('Account'),
             const SizedBox(height: 8),
@@ -152,8 +160,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     fontSize: 14,
                   ),
                 ),
-                child:
-                    Text(_deleting ? 'Deleting account…' : 'Delete account'),
+                child: Text(_deleting ? 'Deleting account…' : 'Delete account'),
               ),
             ),
           ],

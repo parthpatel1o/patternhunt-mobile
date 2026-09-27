@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../core/api/api_client.dart';
-import '../../core/constants/app_constants.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/category_icons.dart';
 import '../../shared/widgets/app_snack_bar.dart';
 import 'profile_widgets.dart';
 
@@ -19,10 +18,9 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _name = TextEditingController();
-  String _category = 'all';
   bool _designer = false;
   bool _saving = false;
-  bool _synced = false;
+  String? _syncedProfileId;
 
   @override
   void dispose() {
@@ -33,8 +31,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _syncFromProfile(UserProfile profile) {
     _name.text = profile.displayName ?? '';
     _designer = profile.isPatternDesigner;
-    _category = profile.defaultCategorySlug ?? 'all';
-    _synced = true;
+    _syncedProfileId = profile.id;
   }
 
   @override
@@ -53,7 +50,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('$e')),
       data: (profile) {
-        if (profile != null && !_synced) {
+        if (profile != null && _syncedProfileId != profile.id) {
           _syncFromProfile(profile);
         }
 
@@ -87,17 +84,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const SizedBox(height: 20),
             ],
-            const ProfileSectionLabel('Browsing'),
-            const SizedBox(height: 8),
-            ProfileNavCard(
-              children: [
-                _SettingsCategoryTile(
-                  value: _category,
-                  onChanged: (v) => setState(() => _category = v),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: FilledButton(
@@ -127,10 +113,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _saving = true);
     try {
       await ref.read(apiClientProvider).patch('/me/settings', {
-        'defaultCategorySlug': _category,
         'displayName': _name.text.trim(),
-        'isPatternDesigner':
-            profile?.hasSubmittedPatterns == true ? true : _designer,
+        'isPatternDesigner': profile?.hasSubmittedPatterns == true
+            ? true
+            : _designer,
       });
       ref.invalidate(profileProvider);
       if (mounted) showAppSnackBar(context, message: 'Settings saved');
@@ -198,8 +184,9 @@ class _SettingsToggleTile extends StatelessWidget {
                     activeThumbColor: Colors.white,
                     inactiveTrackColor: AppColors.border,
                     inactiveThumbColor: Colors.white,
-                    trackOutlineColor:
-                        const WidgetStatePropertyAll(Colors.transparent),
+                    trackOutlineColor: const WidgetStatePropertyAll(
+                      Colors.transparent,
+                    ),
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ],
@@ -207,8 +194,7 @@ class _SettingsToggleTile extends StatelessWidget {
             ),
           ),
         ),
-        if (showDividerBelow)
-          const Divider(height: 1, color: AppColors.border),
+        if (showDividerBelow) const Divider(height: 1, color: AppColors.border),
       ],
     );
   }
@@ -281,112 +267,6 @@ class _SettingsInputTile extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SettingsCategoryTile extends StatelessWidget {
-  const _SettingsCategoryTile({
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Default category',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 15,
-              color: AppColors.foreground,
-            ),
-          ),
-          const SizedBox(height: 2),
-          const Text(
-            'Used when you open the rank board',
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.25,
-              color: AppColors.muted,
-            ),
-          ),
-          const SizedBox(height: 10),
-          _CategoryDropdown(
-            value: value,
-            onChanged: onChanged,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CategoryDropdown extends StatelessWidget {
-  const _CategoryDropdown({required this.value, required this.onChanged});
-
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          isExpanded: true,
-          isDense: true,
-          icon: const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: AppColors.muted,
-          ),
-          borderRadius: BorderRadius.circular(14),
-          items: [
-            DropdownMenuItem(
-              value: 'all',
-              child: Row(
-                children: [
-                  Icon(categoryIcon('all'), size: 18, color: AppColors.accent),
-                  const SizedBox(width: 10),
-                  const Text('All categories'),
-                ],
-              ),
-            ),
-            for (final c in AppConstants.instance.categories)
-              DropdownMenuItem(
-                value: c.slug,
-                child: Row(
-                  children: [
-                    Icon(
-                      categoryIcon(c.slug),
-                      size: 18,
-                      color: AppColors.accent,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(c.name),
-                  ],
-                ),
-              ),
-          ],
-          onChanged: (v) {
-            if (v != null) onChanged(v);
-          },
-        ),
       ),
     );
   }

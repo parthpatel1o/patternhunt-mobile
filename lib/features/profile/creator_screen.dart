@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../core/analytics/analytics.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
@@ -33,7 +34,11 @@ class _CreatorScreenState extends ConsumerState<CreatorScreen> {
       loading: () => Scaffold(
         body: ListView(
           padding: const EdgeInsets.all(16),
-          children: const [PatternCardSkeleton(), SizedBox(height: 12), PatternCardSkeleton()],
+          children: const [
+            PatternCardSkeleton(),
+            SizedBox(height: 12),
+            PatternCardSkeleton(),
+          ],
         ),
       ),
       error: (e, _) => Scaffold(body: Center(child: Text('$e'))),
@@ -58,7 +63,8 @@ class _CreatorScreenState extends ConsumerState<CreatorScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       TextButton.icon(
-                        onPressed: () => context.canPop() ? context.pop() : context.go('/'),
+                        onPressed: () =>
+                            context.canPop() ? context.pop() : context.go('/'),
                         icon: const Icon(Icons.arrow_back, size: 18),
                         label: const Text('Rank board'),
                         style: TextButton.styleFrom(
@@ -74,14 +80,18 @@ class _CreatorScreenState extends ConsumerState<CreatorScreen> {
                         children: [
                           Text(
                             creator.name!,
-                            style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                            style: Theme.of(context).textTheme.displaySmall
+                                ?.copyWith(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 32,
                                 ),
                           ),
                           if (creator.isFoundingMember)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
                               decoration: BoxDecoration(
                                 color: AppColors.primary.withValues(alpha: 0.7),
                                 borderRadius: BorderRadius.circular(999),
@@ -89,11 +99,18 @@ class _CreatorScreenState extends ConsumerState<CreatorScreen> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.star_rounded, size: 14, color: AppColors.foreground),
+                                  Icon(
+                                    Icons.star_rounded,
+                                    size: 14,
+                                    color: AppColors.foreground,
+                                  ),
                                   const SizedBox(width: 4),
                                   Text(
                                     'Founding member',
-                                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(
                                           fontWeight: FontWeight.w700,
                                           color: AppColors.foreground,
                                         ),
@@ -106,7 +123,8 @@ class _CreatorScreenState extends ConsumerState<CreatorScreen> {
                       const SizedBox(height: 6),
                       Text(
                         countLabel,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+                        style: Theme.of(context).textTheme.bodyMedium
+                            ?.copyWith(color: AppColors.muted),
                       ),
                     ],
                   ),
@@ -121,13 +139,15 @@ class _CreatorScreenState extends ConsumerState<CreatorScreen> {
                         const SizedBox(height: 12),
                         Text(
                           'No live patterns',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           '${creator.name} doesn’t have any patterns on the rank board right now.',
                           textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: AppColors.muted),
                         ),
                         const SizedBox(height: 20),
                         FilledButton(
@@ -145,7 +165,10 @@ class _CreatorScreenState extends ConsumerState<CreatorScreen> {
                   for (var i = 0; i < creator.patterns.length; i++) ...[
                     PatternCardWidget(
                       pattern: creator.patterns[i],
-                      rank: creator.boardRanks[creator.patterns[i].id]?.all ?? (i + 1),
+                      rank: creator.allTimeRankFor(creator.patterns[i]) ?? 0,
+                      showRank:
+                          creator.allTimeRankFor(creator.patterns[i]) != null,
+                      rankPeriod: 'all',
                     ),
                     const SizedBox(height: 12),
                   ],

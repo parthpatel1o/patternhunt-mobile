@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/analytics/analytics.dart';
 import '../../core/api/api_client.dart';
+import '../../core/auth/designer_display_name.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
@@ -22,7 +23,13 @@ class MineScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final patternsAsync = ref.watch(myPatternsProvider);
     final profile = ref.watch(profileProvider).valueOrNull;
+    final session = ref.watch(sessionProvider);
     final isDesigner = profile?.isPatternDesigner ?? false;
+    final designerName = designerDisplayName(
+      profileDisplayName: profile?.displayName,
+      userMetadata: session?.user.userMetadata,
+      email: session?.user.email,
+    );
     final insightsAsync = isDesigner ? ref.watch(insightsProvider) : null;
     final statsById = <String, DesignerPatternInsight>{};
     for (final p
@@ -45,8 +52,13 @@ class MineScreen extends ConsumerWidget {
               if (isDesigner) ref.invalidate(insightsProvider);
             },
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 88),
               children: [
+                _MyPatternsHeader(
+                  designerName: designerName,
+                  patternCount: patterns.length,
+                ),
+                const SizedBox(height: 24),
                 if (patterns.isEmpty)
                   AppEmptyState(
                     title: isDesigner ? 'You haven’t submitted anything yet' : 'Register as a designer in Profile to submit patterns.',
@@ -80,6 +92,43 @@ class MineScreen extends ConsumerWidget {
       },
     );
   }
+}
+
+class _MyPatternsHeader extends StatelessWidget {
+  const _MyPatternsHeader({
+    required this.designerName,
+    required this.patternCount,
+  });
+
+  final String designerName;
+  final int patternCount;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        designerName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          height: 1.15,
+          color: AppColors.foreground,
+        ),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        patternCount == 1 ? '1 pattern' : '$patternCount patterns',
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: AppColors.muted,
+        ),
+      ),
+    ],
+  );
 }
 
 class _MyPatternRow extends ConsumerStatefulWidget {
