@@ -359,11 +359,11 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
 
   Future<void> _pickPdf() async {
     if (!_isFree) return;
-    final result = await FilePicker.pickFiles(
+    final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
     );
-    final path = result.isEmpty ? null : result.single.path;
+    final path = result?.files.single.path;
     if (path == null) return;
     final file = File(path);
     if (file.lengthSync() > AppConstants.instance.maxPdfBytes) {
