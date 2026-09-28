@@ -1938,14 +1938,6 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     };
   }
 
-  (Color bg, Color fg) _rankBadgeColors(int rank) {
-    return switch (rank) {
-      1 => (AppColors.primaryStrong, AppColors.foreground),
-      2 || 3 => (AppColors.primary, AppColors.foreground),
-      _ => (AppColors.card, AppColors.muted),
-    };
-  }
-
   (Color bg, Color fg) _pricePillColors(int? rank) {
     final onPodium = rank != null && rank <= 3;
     if (onPodium) {
@@ -1993,13 +1985,6 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     final hasCta = !_isDemo && (download || pattern.patternUrl != null);
     final cardCoach = widget.interactive ? _buildCardCoach() : null;
     final rank = _isDemo ? null : pattern.allTimeRank;
-    final periodLabel =
-        AppConstants.instance.rankPeriods
-            .where((p) => p.value == widget.period)
-            .map((p) => p.label)
-            .firstOrNull ??
-        'All time';
-    final rankColors = rank != null ? _rankBadgeColors(rank) : null;
     final (pillBg, pillFg) = _pricePillColors(rank);
 
     final cardBody = Container(
@@ -2017,11 +2002,11 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         children: [
           _maybePan(
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (images.length > 1) ...[
+                  if (images.length > 1)
                     Row(
                       children: [
                         for (var index = 0; index < images.length; index++) ...[
@@ -2040,9 +2025,10 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                           ),
                         ],
                       ],
-                    ),
-                    const SizedBox(height: 12),
-                  ],
+                    )
+                  else
+                    const SizedBox(height: 6),
+                  const SizedBox(height: 12),
                   AspectRatio(
                     aspectRatio: 1,
                     child: _HuntGallery(
@@ -2075,11 +2061,11 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
-                          children: [
-                            if (_isDemo)
+                        if (_isDemo) ...[
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 10,
@@ -2100,62 +2086,10 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                                   ),
                                 ),
                               ),
-                            if (rank != null && rankColors != null)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: rankColors.$1,
-                                  borderRadius: BorderRadius.circular(999),
-                                  border: rank > 3
-                                      ? Border.all(color: AppColors.border)
-                                      : null,
-                                ),
-                                child: Text(
-                                  '#$rank $periodLabel',
-                                  style: TextStyle(
-                                    color: rankColors.$2,
-                                    fontSize: 13,
-                                    height: 1.0,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: pillBg,
-                                borderRadius: BorderRadius.circular(999),
-                                boxShadow: rank != null && rank <= 3
-                                    ? [
-                                        BoxShadow(
-                                          color: AppColors.accent.withValues(
-                                            alpha: 0.08,
-                                          ),
-                                          blurRadius: 6,
-                                          offset: const Offset(0, 1),
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                              child: Text(
-                                pattern.isFree ? 'Free' : 'Paid',
-                                style: TextStyle(
-                                  color: pillFg,
-                                  fontSize: 13,
-                                  height: 1.0,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                        ],
                         Text(
                           pattern.title,
                           maxLines: 2,
@@ -2191,6 +2125,37 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                               child: name,
                             );
                           },
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: pillBg,
+                            borderRadius: BorderRadius.circular(999),
+                            boxShadow: rank != null && rank <= 3
+                                ? [
+                                    BoxShadow(
+                                      color: AppColors.accent.withValues(
+                                        alpha: 0.08,
+                                      ),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Text(
+                            pattern.isFree ? 'Free' : 'Paid',
+                            style: TextStyle(
+                              color: pillFg,
+                              fontSize: 13,
+                              height: 1.0,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
                       ],
                     ),
