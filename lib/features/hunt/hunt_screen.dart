@@ -1537,31 +1537,35 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     if (mounted) setState(() => _saved = true);
   }
 
-  Future<void> _onCta() async {
+  Future<void> _downloadPdf() async {
     final pattern = widget.pattern;
-    final download = pattern.isFree && pattern.hasPdf;
     final api = ref.read(apiClientProvider);
-    if (download) {
-      setState(() => _ctaLoading = true);
-      try {
-        Analytics.trackPatternCta(api, pattern.id, 'pdf');
-        final result = await api.getData(
-          '/patterns/${pattern.id}/pdf',
-          map: (json) => json as Map<String, dynamic>,
-        );
-        final url = result['url'] as String?;
-        if (url != null) {
-          await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-        }
-      } on ApiException catch (error) {
-        if (mounted) _showError(error.message);
-      } finally {
-        if (mounted) setState(() => _ctaLoading = false);
+    setState(() => _ctaLoading = true);
+    try {
+      Analytics.trackPatternCta(api, pattern.id, 'pdf');
+      final result = await api.getData(
+        '/patterns/${pattern.id}/pdf',
+        map: (json) => json as Map<String, dynamic>,
+      );
+      final url = result['url'] as String?;
+      if (url != null) {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       }
-      return;
+    } on ApiException catch (error) {
+      if (mounted) _showError(error.message);
+    } finally {
+      if (mounted) setState(() => _ctaLoading = false);
     }
+  }
+
+  Future<void> _viewPattern() async {
+    final pattern = widget.pattern;
     if (pattern.patternUrl != null) {
-      Analytics.trackPatternCta(api, pattern.id, 'view');
+      Analytics.trackPatternCta(
+        ref.read(apiClientProvider),
+        pattern.id,
+        'view',
+      );
       if (mounted) {
         await openInAppWebView(
           context,
@@ -1982,7 +1986,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     final pattern = widget.pattern;
     final images = pattern.imageUrls;
     final download = !_isDemo && pattern.isFree && pattern.hasPdf;
-    final hasCta = !_isDemo && (download || pattern.patternUrl != null);
+    final view = !_isDemo && pattern.patternUrl != null;
     final cardCoach = widget.interactive ? _buildCardCoach() : null;
     final rank = _isDemo ? null : pattern.allTimeRank;
     final (pillBg, pillFg) = _pricePillColors(rank);
@@ -2207,7 +2211,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                                 onPressed: _toggleVote,
                               ),
                             ),
-                            if (hasCta) ...[
+                            if (download) ...[
                               const SizedBox(width: 8),
                               Expanded(
                                 child: SizedBox(
@@ -2221,7 +2225,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                                             widget.tutorialMode ||
                                             _ctaLoading)
                                         ? null
-                                        : _onCta,
+                                        : _downloadPdf,
                                     style: FilledButton.styleFrom(
                                       backgroundColor: AppColors.accent,
                                       foregroundColor:
@@ -2238,11 +2242,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                                     child: FittedBox(
                                       fit: BoxFit.scaleDown,
                                       child: Text(
-                                        _ctaLoading
-                                            ? 'Loading…'
-                                            : download
-                                            ? 'Download'
-                                            : 'View Pattern',
+                                        _ctaLoading ? 'Loading…' : 'Download',
                                         maxLines: 1,
                                         softWrap: false,
                                       ),
@@ -2250,7 +2250,46 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                                   ),
                                 ),
                               ),
-                            ] else if (_isDemo || widget.tutorialMode) ...[
+                            ],
+                            if (view) ...[
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: SizedBox(
+                                  height: _kActionBtnHeight,
+                                  child: FilledButton(
+                                    onPressed:
+                                        (!widget.interactive ||
+                                            widget.tutorialMode)
+                                        ? null
+                                        : _viewPattern,
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: AppColors.accent,
+                                      foregroundColor:
+                                          AppColors.accentForeground,
+                                      disabledBackgroundColor: AppColors.accent,
+                                      disabledForegroundColor:
+                                          AppColors.accentForeground,
+                                      shape: const StadiumBorder(),
+                                      textStyle: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    child: const FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        'View Pattern',
+                                        maxLines: 1,
+                                        softWrap: false,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (!download &&
+                                !view &&
+                                (_isDemo || widget.tutorialMode)) ...[
                               // Web `HUNT_CARD_CTA_PLACEHOLDER` — keeps actions aligned.
                               const SizedBox(width: 8),
                               Expanded(

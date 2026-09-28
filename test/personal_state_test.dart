@@ -35,6 +35,7 @@ ProviderContainer _container(_FakeApiClient api) => ProviderContainer(
   overrides: [
     apiClientProvider.overrideWithValue(api),
     authenticatedProvider.overrideWithValue(true),
+    sessionProvider.overrideWithValue(null),
   ],
 );
 
@@ -132,6 +133,30 @@ void main() {
 
     expect(container.read(personalStateProvider), isEmpty);
   });
+
+  test(
+    'mounted pattern IDs reconcile again after signing into another account',
+    () async {
+      final api = _FakeApiClient();
+      final container = _container(api);
+      addTearDown(container.dispose);
+      final notifier = container.read(personalStateProvider.notifier);
+
+      notifier.updateAccountId('account-a');
+      notifier.registerPatternIds(['one']);
+      await Future<void>.delayed(Duration.zero);
+      api.calls.clear();
+
+      notifier.updateAccountId(null);
+      notifier.updateAccountId('account-b');
+      await notifier.reconcileLoaded();
+
+      expect(api.calls, hasLength(1));
+      expect(api.calls.single['data'], {
+        'patternIds': ['one'],
+      });
+    },
+  );
 
   test(
     'an earlier account response cannot repopulate state after logout',

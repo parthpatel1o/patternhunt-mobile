@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/models/models.dart';
@@ -54,6 +55,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _focusLoading = false;
   String? _focusError;
   bool _focusLoadStarted = false;
+  int _focusLoadGeneration = 0;
   bool _showFocusEffect = false;
   bool _revealedFocus = false;
   int _revealAttempts = 0;
@@ -165,13 +167,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _loadFocusedBoard() async {
     final id = _focusId;
     if (id == null || !mounted) return;
+    final loadGeneration = _focusLoadGeneration;
     setState(() {
       _focusLoading = _focusedPage == null;
       _focusError = null;
     });
     try {
       final page = await _fetchContainingPage(id);
-      if (!mounted || _focusId != id) return;
+      if (!mounted ||
+          _focusId != id ||
+          loadGeneration != _focusLoadGeneration) {
+        return;
+      }
       final found = page.patterns.any((pattern) => pattern.id == id);
       setState(() {
         _focusLoading = false;
@@ -188,7 +195,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         );
       }
     } catch (_) {
-      if (!mounted || _focusId != id) return;
+      if (!mounted ||
+          _focusId != id ||
+          loadGeneration != _focusLoadGeneration) {
+        return;
+      }
       setState(() {
         _focusLoading = false;
         _focusError = 'Could not load focused rank board';
@@ -500,6 +511,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<Session?>(sessionProvider, (previous, next) {
+      if (previous?.user.id == next?.user.id || !_rankFocusMode || !mounted) {
+        return;
+      }
+      _focusLoadGeneration++;
+      setState(() {
+        _focusedPage = null;
+        _focusLoading = true;
+      });
+      unawaited(_loadFocusedBoard());
+    });
+    ref.listen<int>(homeReturnRefreshProvider, (previous, next) {
+      if (!mounted || !_categoryInitialized) return;
+      if (_singlePatternMode) {
+        ref.invalidate(patternDetailProvider(widget.focusPatternId!));
+      } else if (_rankFocusMode) {
+        _focusLoadGeneration++;
+        setState(() {
+          _focusedPage = null;
+          _focusLoading = true;
+        });
+        unawaited(_loadFocusedBoard());
+      } else {
+        ref.invalidate(
+          patternsProvider(
+            PatternQuery(
+              category: _isSearching ? null : category,
+              period: period,
+              q: searchQuery,
+              freeOnly: _isSearching ? false : freeOnly,
+            ),
+          ),
+        );
+      }
+    });
     final profile = ref.watch(profileProvider).valueOrNull;
     final constants = AppConstants.instance;
     final rememberedCategory = ref.watch(rememberedRankBoardCategoryProvider);
@@ -653,6 +699,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       patternDetailProvider(widget.focusPatternId!),
     );
     return patternAsync.when(
+      skipLoadingOnRefresh: false,
       loading: () => const PatternCardSkeleton(),
       error: (_, _) => HomeEmptyState(
         categoryName: _categoryLabel(constants),
@@ -673,6 +720,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildSearchOrRankResults(PatternQuery query, AppConstants constants) {
     final patternsAsync = ref.watch(patternsProvider(query));
     return patternsAsync.when(
+      skipLoadingOnRefresh: false,
       loading: () => Column(
         children: const [
           PatternCardSkeleton(),
@@ -721,7 +769,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             animateEntrance: false,
             showSubmitInvite: !_isSearching,
             boardQuery: query,
-            reorderOnVote: !_isSearching,
+            updateRanksOnVote: !_isSearching,
           ),
         );
       },
@@ -748,7 +796,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       showRank: true,
       animateEntrance: false,
       showSubmitInvite: true,
-      reorderOnVote: true,
+      updateRanksOnVote: true,
     );
   }
 
@@ -759,15 +807,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }) {
     final page = _focusedPage;
     if (page == null) return;
-    final updated = [
-      for (final pattern in page.patterns)
-        if (pattern.id == patternId)
-          pattern.copyWith(voted: voted, voteCount: voteCount)
-        else
-          pattern,
-    ];
-    sortPatternsByRank(updated);
-    setState(() => _focusedPage = page.copyWith(patterns: updated));
+    setState(
+      () => _focusedPage = applyRankBoardVote(
+        page,
+        patternId,
+        voted: voted,
+        voteCount: voteCount,
+      ),
+    );
   }
 
   Widget _patternColumn(
@@ -776,8 +823,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     bool animateEntrance = true,
     bool showSubmitInvite = false,
     PatternQuery? boardQuery,
-    bool reorderOnVote = false,
+    bool updateRanksOnVote = false,
   }) {
+    final badgeRanks = showRank
+        ? rankBoardBadges(page, freeOnly: freeOnly)
+        : const <String, int>{};
     return Column(
       children: [
         for (var i = 0; i < page.patterns.length; i++) ...[
@@ -786,17 +836,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ? _focusKey
                 : ValueKey(page.patterns[i].id),
             pattern: page.patterns[i],
-            rank: resolveRankBoardRank(
-              rankOffset: page.rankOffset,
-              index: i,
-              freeOnly: freeOnly,
-              allTimeRank: page.patterns[i].allTimeRank,
-            ),
+            rank: badgeRanks[page.patterns[i].id] ?? page.rankOffset + i + 1,
             rankPeriod: period,
             showRank: showRank,
             animateEntrance: animateEntrance,
             highlight: _showFocusEffect && page.patterns[i].id == _focusId,
-            onVoteChange: reorderOnVote
+            onVoteChange: updateRanksOnVote
                 ? (patternId, voted, voteCount) {
                     if (_rankFocusMode) {
                       _applyFocusedVote(

@@ -37,10 +37,13 @@ class AppShell extends ConsumerWidget {
         location.startsWith('/hunt');
   }
 
-  void _onTabSelected(int index, List<_NavItem> items) {
+  void _onTabSelected(int index, List<_NavItem> items, WidgetRef ref) {
     final route = items[index].route;
     final branchIndex = _branchByRoute[route];
     if (branchIndex == null) return;
+    if (branchIndex == 0 && navigationShell.currentIndex != 0) {
+      ref.read(homeReturnRefreshProvider.notifier).state++;
+    }
     navigationShell.goBranch(
       branchIndex,
       // Tapping the active tab returns to that tab’s root.
@@ -107,8 +110,7 @@ class AppShell extends ConsumerWidget {
       selectedIndex = items.indexWhere((e) => e.route == '/profile');
       if (selectedIndex < 0) selectedIndex = 0;
     }
-    final hideBottomNav =
-        location.startsWith('/login') || location.startsWith('/reset-password');
+    final hideBottomNav = location.startsWith('/reset-password');
     final isProfileRoute =
         location.startsWith('/profile') || location.startsWith('/settings');
     // Logged-out profile embeds LoginScreen; skip AppBar so "Profile" isn't redundant.
@@ -254,7 +256,7 @@ class AppShell extends ConsumerWidget {
           : _BrandBottomNav(
               items: items,
               selectedIndex: selectedIndex.clamp(0, items.length - 1),
-              onSelected: (index) => _onTabSelected(index, items),
+              onSelected: (index) => _onTabSelected(index, items, ref),
             ),
     );
   }

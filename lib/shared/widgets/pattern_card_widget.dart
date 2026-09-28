@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/analytics/analytics.dart';
@@ -47,7 +48,7 @@ class PatternCardWidget extends ConsumerStatefulWidget {
   /// Fade/slide used on the normal board. Off while scrolling a new pattern into place.
   final bool animateEntrance;
 
-  /// Rank board: notify parent so it can re-sort (web `VoteButton` → `PatternGrid`).
+  /// Rank board: notify parent so badge ranks update without moving cards.
   final void Function(String patternId, bool voted, int voteCount)?
   onVoteChange;
 
@@ -92,11 +93,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
   void didUpdateWidget(PatternCardWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Match web VoteButton: never clobber an in-flight optimistic vote.
-    if (!_voting &&
-        (oldWidget.pattern.id != widget.pattern.id ||
-            oldWidget.pattern.saved != widget.pattern.saved ||
-            oldWidget.pattern.voted != widget.pattern.voted ||
-            oldWidget.pattern.voteCount != widget.pattern.voteCount)) {
+    if (!_voting && !_saving && oldWidget.pattern != widget.pattern) {
       _syncFromPattern();
     } else if (oldWidget.pattern.saved != widget.pattern.saved) {
       _saved = widget.pattern.saved;
@@ -286,7 +283,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
       nextVoted,
       saved: personal?.saved ?? _saved,
     );
-    // Optimistic update + parent re-sort (web VoteButton.applyLocal).
+    // Optimistic update + parent badge recalculation.
     _applyVoteLocal(nextVoted, nextCount);
     setState(() => _voting = true);
     try {
@@ -338,7 +335,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
   }
 
   void _notifyVoteChange(bool voted, int voteCount) {
-    // Defer parent re-sort so we don't setState an ancestor mid-child setState.
+    // Defer the parent update so we don't setState an ancestor mid-child setState.
     final notify = widget.onVoteChange;
     if (notify == null) return;
     final id = widget.pattern.id;
@@ -465,30 +462,35 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
     }
   }
 
-  Future<void> _onCta() async {
+  Future<void> _downloadPdf() async {
     final pattern = widget.pattern;
-    final showDownload = pattern.isFree && pattern.hasPdf;
     final api = ref.read(apiClientProvider);
-    if (showDownload) {
-      setState(() => _ctaLoading = true);
-      try {
-        Analytics.trackPatternCta(api, pattern.id, 'pdf');
-        final result = await api.getData(
-          '/patterns/${pattern.id}/pdf',
-          map: (j) => j as Map<String, dynamic>,
-        );
-        final url = result['url'] as String?;
-        if (url != null)
-          await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-      } on ApiException catch (e) {
-        if (mounted) showAppSnackBar(context, message: e.message);
-      } finally {
-        if (mounted) setState(() => _ctaLoading = false);
+    setState(() => _ctaLoading = true);
+    try {
+      Analytics.trackPatternCta(api, pattern.id, 'pdf');
+      final result = await api.getData(
+        '/patterns/${pattern.id}/pdf',
+        map: (j) => j as Map<String, dynamic>,
+      );
+      final url = result['url'] as String?;
+      if (url != null) {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       }
-      return;
+    } on ApiException catch (e) {
+      if (mounted) showAppSnackBar(context, message: e.message);
+    } finally {
+      if (mounted) setState(() => _ctaLoading = false);
     }
+  }
+
+  Future<void> _viewPattern() async {
+    final pattern = widget.pattern;
     if (pattern.patternUrl != null) {
-      Analytics.trackPatternCta(api, pattern.id, 'view');
+      Analytics.trackPatternCta(
+        ref.read(apiClientProvider),
+        pattern.id,
+        'view',
+      );
       if (mounted) {
         await openInAppWebView(
           context,
@@ -511,6 +513,15 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<Session?>(sessionProvider, (previous, next) {
+      if (previous?.user.id == next?.user.id || !mounted) return;
+      // The mounted card may still hold flags from the previous account while
+      // its collection reloads. Clear them before showing the new account.
+      setState(() {
+        _voted = false;
+        _saved = false;
+      });
+    });
     ref.listen<PersonalPatternState?>(
       personalPatternStateProvider(widget.pattern.id),
       (previous, next) {
@@ -529,7 +540,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
     final (voteBg, voteFg, voteBorder) = _voteColors();
     final (pillBg, pillFg) = _pricePillColors();
     final showDownload = pattern.isFree && pattern.hasPdf;
-    final showView = !showDownload && pattern.patternUrl != null;
+    final showView = pattern.patternUrl != null;
     final images = pattern.imageUrls;
     final radius = BorderRadius.circular(16);
 
@@ -541,10 +552,11 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
           _withHighlight(
             LayoutBuilder(
               builder: (context, constraints) {
-                // Outer height from outer width. Do not size Row children to this
-                // value — BoxDecoration.border insets the child, so fixed half×half
-                // children overflow by ~2×borderWidth.
-                final height = constraints.maxWidth / 2;
+                // Keep enough room for two action rows on PDF cards with a
+                // pattern link, including titles that wrap to two lines.
+                final height = showDownload && showView
+                    ? (constraints.maxWidth / 2).clamp(208.0, double.infinity)
+                    : constraints.maxWidth / 2;
                 return SizedBox(
                   height: height,
                   child: GestureDetector(
@@ -566,10 +578,11 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
                         ),
                         child: Row(
                           children: [
-                            // Square pane from inner height so border inset can't
-                            // make the gallery slightly wider than tall.
-                            AspectRatio(
-                              aspectRatio: 1,
+                            // Keep the gallery half the card width when the
+                            // action rows make the card taller than square.
+                            SizedBox(
+                              width:
+                                  (constraints.maxWidth - borderWidth * 2) / 2,
                               child: _buildGallery(images, bg),
                             ),
                             Expanded(
@@ -695,6 +708,10 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
                                                     child: OutlinedButton(
                                                       onPressed: _toggleVote,
                                                       style: OutlinedButton.styleFrom(
+                                                        minimumSize: Size.zero,
+                                                        tapTargetSize:
+                                                            MaterialTapTargetSize
+                                                                .shrinkWrap,
                                                         backgroundColor: voteBg,
                                                         foregroundColor: voteFg,
                                                         disabledBackgroundColor:
@@ -705,9 +722,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
                                                           color: voteBorder,
                                                         ),
                                                         padding:
-                                                            const EdgeInsets.symmetric(
-                                                              horizontal: 8,
-                                                            ),
+                                                            EdgeInsets.zero,
                                                         shape:
                                                             const StadiumBorder(),
                                                         textStyle:
@@ -755,7 +770,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
                                                     duration: 280.ms,
                                                   ),
                                         ),
-                                        if (showDownload || showView) ...[
+                                        if (showDownload && !showView) ...[
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: SizedBox(
@@ -763,15 +778,19 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
                                               child: FilledButton(
                                                 onPressed: _ctaLoading
                                                     ? null
-                                                    : _onCta,
+                                                    : _downloadPdf,
                                                 style: FilledButton.styleFrom(
+                                                  minimumSize: Size.zero,
+                                                  tapTargetSize:
+                                                      MaterialTapTargetSize
+                                                          .shrinkWrap,
                                                   backgroundColor:
                                                       AppColors.accent,
                                                   foregroundColor: AppColors
                                                       .accentForeground,
                                                   padding:
                                                       const EdgeInsets.symmetric(
-                                                        horizontal: 10,
+                                                        horizontal: 2,
                                                       ),
                                                   shape: const StadiumBorder(),
                                                   textStyle: const TextStyle(
@@ -779,19 +798,77 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
                                                     fontWeight: FontWeight.w600,
                                                   ),
                                                 ),
-                                                child: Text(
-                                                  _ctaLoading
-                                                      ? '…'
-                                                      : showDownload
-                                                      ? 'Download'
-                                                      : 'View',
+                                                child: FittedBox(
+                                                  fit: BoxFit.scaleDown,
+                                                  child: Text(
+                                                    _ctaLoading
+                                                        ? '…'
+                                                        : 'Download',
+                                                    maxLines: 1,
+                                                  ),
                                                 ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                        if (showView) ...[
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: SizedBox(
+                                              height: 36,
+                                              child: FilledButton(
+                                                onPressed: _viewPattern,
+                                                style: FilledButton.styleFrom(
+                                                  minimumSize: Size.zero,
+                                                  tapTargetSize:
+                                                      MaterialTapTargetSize
+                                                          .shrinkWrap,
+                                                  backgroundColor:
+                                                      AppColors.accent,
+                                                  foregroundColor: AppColors
+                                                      .accentForeground,
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 2,
+                                                      ),
+                                                  shape: const StadiumBorder(),
+                                                  textStyle: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                                child: const Text('View'),
                                               ),
                                             ),
                                           ),
                                         ],
                                       ],
                                     ),
+                                    if (showDownload && showView) ...[
+                                      const SizedBox(height: 6),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        height: 36,
+                                        child: FilledButton(
+                                          onPressed: _ctaLoading
+                                              ? null
+                                              : _downloadPdf,
+                                          style: FilledButton.styleFrom(
+                                            backgroundColor: AppColors.accent,
+                                            foregroundColor:
+                                                AppColors.accentForeground,
+                                            shape: const StadiumBorder(),
+                                            textStyle: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            _ctaLoading ? '…' : 'Download',
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),

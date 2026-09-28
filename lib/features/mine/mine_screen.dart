@@ -148,32 +148,35 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
   DesignerPatternInsight? get insight => widget.insight;
 
   bool get _showDownload => pattern.isFree && pattern.hasPdf;
-  bool get _showView => !_showDownload && pattern.patternUrl != null;
-  bool get _hasCta => _showDownload || _showView;
+  bool get _showView => pattern.patternUrl != null;
 
-  Future<void> _onViewPattern() async {
+  Future<void> _downloadPdf() async {
     final api = ref.read(apiClientProvider);
-    if (_showDownload) {
-      setState(() => _ctaLoading = true);
-      try {
-        Analytics.trackPatternCta(api, pattern.id, 'pdf');
-        final result = await api.getData(
-          '/patterns/${pattern.id}/pdf',
-          map: (j) => j as Map<String, dynamic>,
-        );
-        final url = result['url'] as String?;
-        if (url != null) {
-          await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-        }
-      } on ApiException catch (e) {
-        if (mounted) showAppSnackBar(context, message: e.message);
-      } finally {
-        if (mounted) setState(() => _ctaLoading = false);
+    setState(() => _ctaLoading = true);
+    try {
+      Analytics.trackPatternCta(api, pattern.id, 'pdf');
+      final result = await api.getData(
+        '/patterns/${pattern.id}/pdf',
+        map: (j) => j as Map<String, dynamic>,
+      );
+      final url = result['url'] as String?;
+      if (url != null) {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       }
-      return;
+    } on ApiException catch (e) {
+      if (mounted) showAppSnackBar(context, message: e.message);
+    } finally {
+      if (mounted) setState(() => _ctaLoading = false);
     }
+  }
+
+  Future<void> _viewPattern() async {
     if (pattern.patternUrl != null) {
-      Analytics.trackPatternCta(api, pattern.id, 'view');
+      Analytics.trackPatternCta(
+        ref.read(apiClientProvider),
+        pattern.id,
+        'view',
+      );
       if (mounted) {
         await openInAppWebView(
           context,
@@ -199,6 +202,15 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
     try {
       launched = DateTime.parse(pattern.createdAt).toLocal();
     } catch (_) {}
+    final ctaStyle = FilledButton.styleFrom(
+      backgroundColor: AppColors.accent,
+      foregroundColor: AppColors.accentForeground,
+      disabledBackgroundColor: AppColors.accent.withValues(alpha: 0.6),
+      shape: const StadiumBorder(),
+      visualDensity: VisualDensity.compact,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -371,39 +383,37 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
               ],
             ),
             const SizedBox(height: 12),
-            if (_hasCta) ...[
-              FilledButton.icon(
-                onPressed: _ctaLoading ? null : _onViewPattern,
-                icon: _ctaLoading
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(
-                        _showDownload
-                            ? Icons.download_outlined
-                            : Icons.open_in_new_rounded,
-                        size: 14,
+            if (_showDownload || _showView) ...[
+              Row(
+                children: [
+                  if (_showDownload)
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _ctaLoading ? null : _downloadPdf,
+                        style: ctaStyle,
+                        icon: _ctaLoading
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.download_outlined, size: 14),
+                        label: const Text('Download'),
                       ),
-                label: Text(_showDownload ? 'Download' : 'View pattern'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accent,
-                  foregroundColor: AppColors.accentForeground,
-                  disabledBackgroundColor: AppColors.accent.withValues(
-                    alpha: 0.6,
-                  ),
-                  shape: const StadiumBorder(),
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                  textStyle: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
+                    ),
+                  if (_showDownload && _showView) const SizedBox(width: 8),
+                  if (_showView)
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _viewPattern,
+                        style: ctaStyle,
+                        icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                        label: const Text('View pattern'),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 8),
             ],

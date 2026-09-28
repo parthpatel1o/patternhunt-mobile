@@ -23,6 +23,10 @@ final authenticatedProvider = Provider<bool>(
   (ref) => ref.watch(sessionProvider) != null,
 );
 
+/// Incremented when the user returns to the Home tab so its retained board
+/// reloads in server order.
+final homeReturnRefreshProvider = StateProvider<int>((ref) => 0);
+
 /// Local mirror of the server's most recently used rank-board category. It
 /// lets Home and Hunt agree immediately while the background PATCH completes.
 final rememberedRankBoardCategoryProvider = StateProvider<String?>((ref) {
@@ -79,6 +83,8 @@ class PersonalStateNotifier
   PersonalStateNotifier(this.ref) : super(const {});
 
   final Ref ref;
+  // Keep visible IDs across account changes so an already mounted board can
+  // reconcile for the new account without requiring a manual refresh.
   final Set<String> _knownIds = <String>{};
   final Map<String, int> _generations = <String, int>{};
   String? _accountId;
@@ -96,7 +102,6 @@ class PersonalStateNotifier
     if (_accountId == nextAccountId) return;
     _accountId = nextAccountId;
     _sessionGeneration++;
-    _knownIds.clear();
     _generations.clear();
     state = const {};
   }
@@ -292,6 +297,8 @@ class PatternQuery {
 class PatternsNotifier extends FamilyAsyncNotifier<PatternsPage, PatternQuery> {
   @override
   Future<PatternsPage> build(PatternQuery query) {
+    // Pattern payloads include viewer-specific voted/saved fields.
+    ref.watch(sessionProvider.select((session) => session?.user.id));
     return _fetch(query, offset: 0);
   }
 
@@ -331,8 +338,8 @@ class PatternsNotifier extends FamilyAsyncNotifier<PatternsPage, PatternQuery> {
     }
   }
 
-  /// Optimistic vote update + re-sort (matches web `PatternGrid.onVoteChange`).
-  /// Search results keep relevance order and are not re-sorted.
+  /// Update the vote in place. The board computes new badge ranks without
+  /// moving cards until the next server refresh.
   void applyVote(
     String patternId, {
     required bool voted,
@@ -340,38 +347,38 @@ class PatternsNotifier extends FamilyAsyncNotifier<PatternsPage, PatternQuery> {
   }) {
     final current = state.valueOrNull;
     if (current == null) return;
-    final updated = [
-      for (final pattern in current.patterns)
+    state = AsyncData(
+      applyRankBoardVote(
+        current,
+        patternId,
+        voted: voted,
+        voteCount: voteCount,
+      ),
+    );
+  }
+}
+
+PatternsPage applyRankBoardVote(
+  PatternsPage page,
+  String patternId, {
+  required bool voted,
+  required int voteCount,
+}) {
+  return page.copyWith(
+    patterns: [
+      for (final pattern in page.patterns)
         if (pattern.id == patternId)
           pattern.copyWith(voted: voted, voteCount: voteCount)
         else
           pattern,
-    ];
-    final isSearch = arg.q != null && arg.q!.isNotEmpty;
-    if (!isSearch) {
-      sortPatternsByRank(updated);
-    }
-    state = AsyncData(current.copyWith(patterns: updated));
-  }
-}
-
-/// Same ordering as web `sortByRank`: votes desc, then newer first.
-void sortPatternsByRank(List<PatternCard> patterns) {
-  patterns.sort((a, b) {
-    if (b.voteCount != a.voteCount) return b.voteCount.compareTo(a.voteCount);
-    final aCreated =
-        DateTime.tryParse(a.createdAt)?.millisecondsSinceEpoch ?? 0;
-    final bCreated =
-        DateTime.tryParse(b.createdAt)?.millisecondsSinceEpoch ?? 0;
-    return bCreated.compareTo(aCreated);
-  });
+    ],
+  );
 }
 
 /// Resolves a badge rank for the interactive rank board.
 ///
-/// The normal board follows its current local ordering after an optimistic
-/// vote. Free-only is the exception: it hides paid entries, so API ranks keep
-/// the meaningful gaps from the full board.
+/// Free-only hides paid entries, so API ranks keep the meaningful gaps from
+/// the full board.
 int resolveRankBoardRank({
   required int rankOffset,
   required int index,
@@ -380,6 +387,41 @@ int resolveRankBoardRank({
 }) {
   final listRank = rankOffset + index + 1;
   return freeOnly ? allTimeRank ?? listRank : listRank;
+}
+
+/// Reassigns the visible rank slots by current vote totals without changing
+/// the order of [page.patterns]. Server ranks and order return on refresh.
+Map<String, int> rankBoardBadges(PatternsPage page, {required bool freeOnly}) {
+  final patterns = page.patterns;
+  final rankSlots = [
+    for (var index = 0; index < patterns.length; index++)
+      resolveRankBoardRank(
+        rankOffset: page.rankOffset,
+        index: index,
+        freeOnly: freeOnly,
+        allTimeRank: patterns[index].allTimeRank,
+      ),
+  ];
+  if (freeOnly) rankSlots.sort();
+
+  final rankedIndices = List<int>.generate(patterns.length, (index) => index);
+  rankedIndices.sort((a, b) {
+    final first = patterns[a];
+    final second = patterns[b];
+    final byVotes = second.voteCount.compareTo(first.voteCount);
+    if (byVotes != 0) return byVotes;
+    final firstCreated =
+        DateTime.tryParse(first.createdAt)?.millisecondsSinceEpoch ?? 0;
+    final secondCreated =
+        DateTime.tryParse(second.createdAt)?.millisecondsSinceEpoch ?? 0;
+    final byDate = secondCreated.compareTo(firstCreated);
+    return byDate != 0 ? byDate : a.compareTo(b);
+  });
+
+  return {
+    for (var rankIndex = 0; rankIndex < rankedIndices.length; rankIndex++)
+      patterns[rankedIndices[rankIndex]].id: rankSlots[rankIndex],
+  };
 }
 
 /// Produces the contiguous, top-of-board list used for a focused pattern.
@@ -432,6 +474,7 @@ final patternDetailProvider = FutureProvider.family<PatternCard, String>((
   ref,
   id,
 ) async {
+  ref.watch(sessionProvider.select((session) => session?.user.id));
   final api = ref.watch(apiClientProvider);
   return api.getData(
     '/patterns/$id',

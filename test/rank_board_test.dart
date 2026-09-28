@@ -6,6 +6,7 @@ PatternCard _pattern({
   required String id,
   required int votes,
   required int rank,
+  String createdAt = '2026-01-01T00:00:00.000Z',
 }) {
   return PatternCard(
     id: id,
@@ -18,7 +19,7 @@ PatternCard _pattern({
     hasPdf: false,
     voteCount: votes,
     voted: false,
-    createdAt: '2026-01-01T00:00:00.000Z',
+    createdAt: createdAt,
     isArchived: false,
     saved: false,
     allTimeRank: rank,
@@ -38,39 +39,73 @@ PatternsPage _page(
 );
 
 void main() {
-  test(
-    'optimistic vote reorders a normal board and updates ranks immediately',
-    () {
-      final patterns = [
-        _pattern(id: 'first', votes: 10, rank: 1),
-        _pattern(id: 'second', votes: 9, rank: 2),
-      ];
-
-      patterns[1] = patterns[1].copyWith(voteCount: 11, voted: true);
-      sortPatternsByRank(patterns);
-
-      expect(patterns.map((pattern) => pattern.id), ['second', 'first']);
-      expect(
-        resolveRankBoardRank(
-          rankOffset: 0,
-          index: 0,
-          freeOnly: false,
-          allTimeRank: patterns[0].allTimeRank,
+  test('voting updates all badges but keeps card positions until refresh', () {
+    final page = _page(
+      [
+        _pattern(id: 'first', votes: 9, rank: 1),
+        _pattern(id: 'second', votes: 8, rank: 2),
+        _pattern(id: 'third', votes: 6, rank: 3),
+        _pattern(
+          id: 'fourth',
+          votes: 5,
+          rank: 4,
+          createdAt: '2026-01-03T00:00:00.000Z',
         ),
-        1,
-      );
-      // The old server snapshot (#2) must not win after the local reorder.
-      expect(
-        resolveRankBoardRank(
-          rankOffset: 0,
-          index: 1,
-          freeOnly: false,
-          allTimeRank: patterns[1].allTimeRank,
+        _pattern(
+          id: 'fifth',
+          votes: 5,
+          rank: 5,
+          createdAt: '2026-01-02T00:00:00.000Z',
         ),
-        2,
-      );
-    },
-  );
+      ],
+      hasMore: false,
+      nextOffset: null,
+    );
+
+    final upvoted = applyRankBoardVote(
+      page,
+      'fifth',
+      voted: true,
+      voteCount: 6,
+    );
+    expect(upvoted.patterns.map((pattern) => pattern.id), [
+      'first',
+      'second',
+      'third',
+      'fourth',
+      'fifth',
+    ]);
+    expect(rankBoardBadges(upvoted, freeOnly: false), {
+      'first': 1,
+      'second': 2,
+      'third': 4,
+      'fourth': 5,
+      'fifth': 3,
+    });
+
+    final unvoted = applyRankBoardVote(
+      upvoted,
+      'fifth',
+      voted: false,
+      voteCount: 5,
+    );
+    expect(unvoted.patterns.last.id, 'fifth');
+    expect(rankBoardBadges(unvoted, freeOnly: false)['fifth'], 5);
+
+    final refreshed = _page(
+      [
+        upvoted.patterns[0],
+        upvoted.patterns[1],
+        upvoted.patterns[4],
+        upvoted.patterns[2],
+        upvoted.patterns[3],
+      ],
+      hasMore: false,
+      nextOffset: null,
+    );
+    expect(refreshed.patterns[2].id, 'fifth');
+    expect(rankBoardBadges(refreshed, freeOnly: false)['fifth'], 3);
+  });
 
   test('free-only board preserves server ranks with gaps', () {
     const ranks = [1, 3, 7];
@@ -85,6 +120,30 @@ void main() {
     ];
 
     expect(resolved, [1, 3, 7]);
+  });
+
+  test('free-only vote exchanges existing rank slots without moving cards', () {
+    final page = _page(
+      [
+        _pattern(id: 'first', votes: 10, rank: 1),
+        _pattern(id: 'second', votes: 9, rank: 3),
+        _pattern(id: 'third', votes: 8, rank: 7),
+      ],
+      hasMore: false,
+      nextOffset: null,
+    );
+    final voted = applyRankBoardVote(page, 'third', voted: true, voteCount: 11);
+
+    expect(voted.patterns.map((pattern) => pattern.id), [
+      'first',
+      'second',
+      'third',
+    ]);
+    expect(rankBoardBadges(voted, freeOnly: true), {
+      'first': 3,
+      'second': 7,
+      'third': 1,
+    });
   });
 
   test('period cards retain the API all-time vote count', () {
