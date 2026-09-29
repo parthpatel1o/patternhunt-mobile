@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -452,39 +453,73 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
             '/patterns/${widget.pattern.id}/report',
             data: {'reason': reason},
           );
-      if (mounted)
+      if (mounted) {
         showAppSnackBar(
           context,
           message: 'Thanks — your report has been sent.',
         );
+      }
     } on ApiException catch (e) {
       if (mounted) showAppSnackBar(context, message: e.message);
     }
   }
 
-  Future<void> _downloadPdf() async {
+  Future<Uri> _pdfUrl(ApiClient api, String patternId) async {
+    final result = await api.getData(
+      '/patterns/$patternId/pdf',
+      map: (j) => j as Map<String, dynamic>,
+    );
+    final url = result['url'] as String?;
+    final uri = url == null ? null : Uri.tryParse(url);
+    if (uri == null ||
+        !(uri.isScheme('http') || uri.isScheme('https')) ||
+        uri.host.isEmpty) {
+      throw const FormatException('Invalid PDF link');
+    }
+    return uri;
+  }
+
+  Future<void> _openPdf({bool preview = false}) async {
     final pattern = widget.pattern;
     final api = ref.read(apiClientProvider);
     setState(() => _ctaLoading = true);
     try {
       Analytics.trackPatternCta(api, pattern.id, 'pdf');
-      final result = await api.getData(
-        '/patterns/${pattern.id}/pdf',
-        map: (j) => j as Map<String, dynamic>,
-      );
-      final url = result['url'] as String?;
-      if (url != null) {
-        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      final uri = await _pdfUrl(api, pattern.id);
+      if (!mounted) return;
+      if (preview && defaultTargetPlatform == TargetPlatform.iOS) {
+        await openInAppWebView(
+          context,
+          url: uri.toString(),
+          title: pattern.title,
+          browserUrlResolver: () => _pdfUrl(api, pattern.id),
+        );
+      } else {
+        final opened = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (!opened && mounted) {
+          showAppSnackBar(context, message: 'Could not open the PDF.');
+        }
       }
     } on ApiException catch (e) {
       if (mounted) showAppSnackBar(context, message: e.message);
+    } on FormatException {
+      if (mounted) showAppSnackBar(context, message: 'Could not open the PDF.');
     } finally {
       if (mounted) setState(() => _ctaLoading = false);
     }
   }
 
+  Future<void> _downloadPdf() => _openPdf();
+
   Future<void> _viewPattern() async {
     final pattern = widget.pattern;
+    if (pattern.isFree && pattern.hasPdf) {
+      await _openPdf(preview: true);
+      return;
+    }
     if (pattern.patternUrl != null) {
       Analytics.trackPatternCta(
         ref.read(apiClientProvider),
@@ -539,7 +574,8 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
     final (badgeBg, badgeFg) = _rankBadgeColors();
     final (voteBg, voteFg, voteBorder) = _voteColors();
     final (pillBg, pillFg) = _pricePillColors();
-    final showDownload = pattern.isFree && pattern.hasPdf;
+    final showDownload =
+        pattern.isFree && pattern.hasPdf && pattern.patternUrl == null;
     final showView = pattern.patternUrl != null;
     final images = pattern.imageUrls;
     final radius = BorderRadius.circular(16);
@@ -552,11 +588,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
           _withHighlight(
             LayoutBuilder(
               builder: (context, constraints) {
-                // Keep enough room for two action rows on PDF cards with a
-                // pattern link, including titles that wrap to two lines.
-                final height = showDownload && showView
-                    ? (constraints.maxWidth / 2).clamp(208.0, double.infinity)
-                    : constraints.maxWidth / 2;
+                final height = constraints.maxWidth / 2;
                 return SizedBox(
                   height: height,
                   child: GestureDetector(
@@ -770,7 +802,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
                                                     duration: 280.ms,
                                                   ),
                                         ),
-                                        if (showDownload && !showView) ...[
+                                        if (showDownload) ...[
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: SizedBox(
@@ -817,7 +849,9 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
                                             child: SizedBox(
                                               height: 36,
                                               child: FilledButton(
-                                                onPressed: _viewPattern,
+                                                onPressed: _ctaLoading
+                                                    ? null
+                                                    : _viewPattern,
                                                 style: FilledButton.styleFrom(
                                                   minimumSize: Size.zero,
                                                   tapTargetSize:
@@ -837,38 +871,15 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
                                                     fontWeight: FontWeight.w600,
                                                   ),
                                                 ),
-                                                child: const Text('View'),
+                                                child: Text(
+                                                  _ctaLoading ? '…' : 'View',
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ],
                                       ],
                                     ),
-                                    if (showDownload && showView) ...[
-                                      const SizedBox(height: 6),
-                                      SizedBox(
-                                        width: double.infinity,
-                                        height: 36,
-                                        child: FilledButton(
-                                          onPressed: _ctaLoading
-                                              ? null
-                                              : _downloadPdf,
-                                          style: FilledButton.styleFrom(
-                                            backgroundColor: AppColors.accent,
-                                            foregroundColor:
-                                                AppColors.accentForeground,
-                                            shape: const StadiumBorder(),
-                                            textStyle: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            _ctaLoading ? '…' : 'Download',
-                                          ),
-                                        ),
-                                      ),
-                                    ],
                                   ],
                                 ),
                               ),
@@ -1188,7 +1199,7 @@ class _ExpandHitTest extends SingleChildRenderObjectWidget {
 }
 
 class _RenderExpandHitTest extends RenderProxyBox {
-  _RenderExpandHitTest({required double vertical}) : _vertical = vertical;
+  _RenderExpandHitTest({required this._vertical});
 
   double _vertical;
 

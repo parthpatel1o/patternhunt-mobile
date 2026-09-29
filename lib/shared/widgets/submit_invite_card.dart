@@ -1,8 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+
 import '../../core/theme/app_colors.dart';
+import '../../features/submit/submit_navigation.dart';
 
 /// Last rank-board slot. Matches web `SubmitInviteCard`.
 class SubmitInviteCard extends StatelessWidget {
@@ -32,7 +33,7 @@ class SubmitInviteCard extends StatelessWidget {
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    onTap: () => context.go('/submit'),
+                    onTap: () => openSubmit(context),
                     child: Row(
                       children: [
                         SizedBox(
@@ -40,7 +41,10 @@ class SubmitInviteCard extends StatelessWidget {
                           child: const ColoredBox(
                             color: AppColors.background,
                             child: Center(
-                              child: Text('🧶', style: TextStyle(fontSize: 36, height: 1)),
+                              child: Text(
+                                '🧶',
+                                style: TextStyle(fontSize: 36, height: 1),
+                              ),
                             ),
                           ),
                         ),
@@ -55,7 +59,8 @@ class SubmitInviteCard extends StatelessWidget {
                                   'Want your pattern here?',
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  style: Theme.of(context).textTheme.titleSmall
+                                      ?.copyWith(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 15,
                                         height: 1.2,

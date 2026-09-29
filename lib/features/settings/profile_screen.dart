@@ -11,6 +11,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
 import '../../shared/widgets/app_snack_bar.dart';
 import '../auth/login_screen.dart';
+import '../submit/submit_navigation.dart';
 import 'profile_widgets.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -92,7 +93,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ProfileNavTile(
                     icon: Icons.add_rounded,
                     label: 'Submit a pattern',
-                    onTap: () => context.go('/submit'),
+                    onTap: () => openSubmit(context),
                     showDividerAbove: true,
                   ),
                 ],

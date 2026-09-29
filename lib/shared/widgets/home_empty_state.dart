@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../features/submit/submit_navigation.dart';
 import 'app_empty_state.dart';
 
 /// Matches web `EmptyState` + `EmptyScoreboard` / `SearchEmpty` (card, no icon by default).
@@ -45,8 +47,7 @@ class HomeEmptyState extends StatelessWidget {
           'The rank board is empty in $categoryName. Browse everything, or be the first to add one.';
     } else {
       title = 'The rank board is waiting';
-      description =
-          'No patterns have been published yet. Submit one and it’ll show up here for the community to upvote.';
+      description = 'No patterns have been published yet. Submit one and it’ll show up here for the community to upvote.';
     }
 
     return AppEmptyState(
@@ -68,7 +69,8 @@ class HomeEmptyState extends StatelessWidget {
                   EmptyStatePillButton(
                     label: 'Show all patterns',
                     filled: false,
-                    onPressed: onClearFreeOnly ?? onSeeAll ?? () => context.go('/'),
+                    onPressed:
+                        onClearFreeOnly ?? onSeeAll ?? () => context.go('/'),
                   )
                 else if (categoryName != null)
                   EmptyStatePillButton(
@@ -79,7 +81,7 @@ class HomeEmptyState extends StatelessWidget {
                 EmptyStatePillButton(
                   label: 'Submit a pattern',
                   filled: true,
-                  onPressed: () => context.go('/submit'),
+                  onPressed: () => openSubmit(context),
                 ),
               ],
             ),

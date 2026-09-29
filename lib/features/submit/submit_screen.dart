@@ -596,6 +596,8 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
                 TextField(
                   controller: _designerName,
                   textCapitalization: TextCapitalization.words,
+                  onTapOutside: (_) =>
+                      FocusManager.instance.primaryFocus?.unfocus(),
                   decoration: fieldDecoration('Woolly Studio'),
                 ),
                 const SizedBox(height: 16),
@@ -606,6 +608,8 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
                 controller: _title,
                 textCapitalization: TextCapitalization.sentences,
                 maxLength: 80,
+                onTapOutside: (_) =>
+                    FocusManager.instance.primaryFocus?.unfocus(),
                 decoration: fieldDecoration('Tiny frog plushie')
                     .copyWith(counterText: ''),
               ),
@@ -708,6 +712,8 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
               TextField(
                 controller: _url,
                 keyboardType: TextInputType.url,
+                onTapOutside: (_) =>
+                    FocusManager.instance.primaryFocus?.unfocus(),
                 decoration: fieldDecoration('https://'),
               ),
               if (_isFree) ...[

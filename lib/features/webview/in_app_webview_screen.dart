@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
+
 import '../../core/theme/app_colors.dart';
 
 class InAppWebViewScreen extends StatefulWidget {
@@ -13,10 +14,14 @@ class InAppWebViewScreen extends StatefulWidget {
     super.key,
     required this.url,
     this.title,
+    this.browserUrlResolver,
   });
 
   final String url;
   final String? title;
+
+  /// Refreshes short-lived links before opening them outside the app.
+  final Future<Uri?> Function()? browserUrlResolver;
 
   @override
   State<InAppWebViewScreen> createState() => _InAppWebViewScreenState();
@@ -55,7 +60,8 @@ class _InAppWebViewScreenState extends State<InAppWebViewScreen> {
             setState(() {
               _loading = true;
               _error = null;
-              if (uri != null && (uri.isScheme('http') || uri.isScheme('https'))) {
+              if (uri != null &&
+                  (uri.isScheme('http') || uri.isScheme('https'))) {
                 _currentUri = uri;
               }
             });
@@ -74,7 +80,9 @@ class _InAppWebViewScreenState extends State<InAppWebViewScreen> {
             if (!mounted) return;
             setState(() {
               _loading = false;
-              _error = error.description.isNotEmpty ? error.description : 'Failed to load page';
+              _error = error.description.isNotEmpty
+                  ? error.description
+                  : 'Failed to load page';
             });
             _loadingTimeout?.cancel();
           },
@@ -130,15 +138,29 @@ class _InAppWebViewScreenState extends State<InAppWebViewScreen> {
     if (trimmed.isEmpty) return null;
     final withScheme = trimmed.contains('://') ? trimmed : 'https://$trimmed';
     final uri = Uri.tryParse(withScheme);
-    if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) return null;
+    if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
+      return null;
+    }
     if (uri.host.isEmpty) return null;
     return uri;
   }
 
   Future<void> _openInBrowser() async {
-    final uri = _currentUri ?? _initialUri;
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      final uri =
+          await widget.browserUrlResolver?.call() ?? _currentUri ?? _initialUri;
+      if (uri == null) return;
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && mounted) _showBrowserError();
+    } catch (_) {
+      if (mounted) _showBrowserError();
+    }
+  }
+
+  void _showBrowserError() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Could not open this page in the browser.')),
+    );
   }
 
   @override
@@ -196,24 +218,31 @@ class _InAppWebViewScreenState extends State<InAppWebViewScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.wifi_off_rounded, size: 40, color: AppColors.muted),
+                          const Icon(
+                            Icons.wifi_off_rounded,
+                            size: 40,
+                            color: AppColors.muted,
+                          ),
                           const SizedBox(height: 12),
                           Text(
                             'Couldn’t load this page',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 6),
                           Text(
                             _error!,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: AppColors.muted),
                             textAlign: TextAlign.center,
                           ),
                           if (_initialUri != null) ...[
                             const SizedBox(height: 8),
                             Text(
                               _initialUri.toString(),
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: AppColors.muted),
                               textAlign: TextAlign.center,
                               maxLines: 3,
                               overflow: TextOverflow.ellipsis,

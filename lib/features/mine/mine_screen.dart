@@ -12,6 +12,7 @@ import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
+import '../submit/submit_navigation.dart';
 import '../../shared/widgets/app_empty_state.dart';
 import '../../shared/widgets/app_snack_bar.dart';
 import '../../shared/widgets/in_app_webview.dart';
@@ -69,7 +70,7 @@ class MineScreen extends ConsumerWidget {
                         ? EmptyStatePillButton(
                             label: 'Submit a pattern',
                             filled: true,
-                            onPressed: () => context.go('/submit'),
+                            onPressed: () => openSubmit(context),
                           )
                         : EmptyStatePillButton(
                             label: 'Open Profile',

@@ -7,15 +7,80 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
 import '../../features/saved/create_folder_dialog.dart';
 import '../../features/search/search_overlay.dart';
+import '../../features/submit/submit_navigation.dart';
 import 'header_accent_button.dart';
 
-class AppShell extends ConsumerWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   /// Stable key so search can expand from the AppBar icon bounds.
   static final searchButtonKey = GlobalKey();
+
+  @override
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  final _searchProgress = ValueNotifier<double>(0);
+  bool _searchOpen = false;
+
+  @override
+  void dispose() {
+    _searchProgress.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openSearch() async {
+    if (_searchOpen) return;
+    final box =
+        AppShell.searchButtonKey.currentContext?.findRenderObject()
+            as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final origin = Rect.fromCenter(
+      center: box.localToGlobal(box.size.center(Offset.zero)),
+      width: box.size.width,
+      height: box.size.height,
+    );
+    final pressedWidth =
+        (box.localToGlobal(Offset(box.size.width, 0)) -
+                box.localToGlobal(Offset.zero))
+            .distance;
+    setState(() => _searchOpen = true);
+    try {
+      await showPatternSearch(
+        context,
+        origin: origin,
+        originScale: pressedWidth / box.size.width,
+        onProgress: (value) {
+          if (mounted) _searchProgress.value = value;
+        },
+      );
+    } finally {
+      if (mounted) setState(() => _searchOpen = false);
+    }
+  }
+
+  Widget _yieldToSearch(Widget child, {double direction = -1}) {
+    return ValueListenableBuilder<double>(
+      valueListenable: _searchProgress,
+      child: child,
+      builder: (context, progress, child) {
+        final t = AppMotion.soft.transform((progress / .46).clamp(0.0, 1.0));
+        return IgnorePointer(
+          ignoring: _searchOpen,
+          child: Opacity(
+            opacity: 1 - t,
+            child: Transform.translate(
+              offset: Offset(direction * 24 * t, -4 * t),
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   /// Branch index order must match [StatefulShellRoute] branches in router.dart.
   static const _branchByRoute = <String, int>{
@@ -41,18 +106,18 @@ class AppShell extends ConsumerWidget {
     final route = items[index].route;
     final branchIndex = _branchByRoute[route];
     if (branchIndex == null) return;
-    if (branchIndex == 0 && navigationShell.currentIndex != 0) {
+    if (branchIndex == 0 && widget.navigationShell.currentIndex != 0) {
       ref.read(homeReturnRefreshProvider.notifier).state++;
     }
-    navigationShell.goBranch(
+    widget.navigationShell.goBranch(
       branchIndex,
       // Tapping the active tab returns to that tab’s root.
-      initialLocation: branchIndex == navigationShell.currentIndex,
+      initialLocation: branchIndex == widget.navigationShell.currentIndex,
     );
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider);
     final profile = ref.watch(profileProvider).valueOrNull;
     final location = GoRouterState.of(context).uri.path;
@@ -126,8 +191,9 @@ class AppShell extends ConsumerWidget {
         location.startsWith('/mine') ||
         location.startsWith('/upvotes') ||
         location.startsWith('/insights') ||
-        location.startsWith('/submit') ||
         location.startsWith('/settings');
+    final showSubmitBack = location.startsWith('/submit');
+    final showBack = showBackToProfile || showSubmitBack;
     final pageTitle = _titleForLocation(location);
     final useLargePageTitle =
         location.startsWith('/saved') ||
@@ -171,58 +237,60 @@ class AppShell extends ConsumerWidget {
           );
 
     return Scaffold(
+      resizeToAvoidBottomInset: !_searchOpen,
       appBar: hideAppBar
           ? null
           : AppBar(
-              leading: showBackToProfile
+              centerTitle: false,
+              leading: showBack
                   ? IconButton(
-                      tooltip: 'Back to Profile',
-                      onPressed: () => context.go('/profile'),
+                      tooltip: showSubmitBack ? 'Back' : 'Back to Profile',
+                      onPressed: showSubmitBack
+                          ? () => context.go(
+                              submitReturnLocation(
+                                GoRouterState.of(context).uri,
+                              ),
+                            )
+                          : () => context.go('/profile'),
                       icon: const Icon(Icons.arrow_back_rounded),
                     )
                   : null,
-              title: AnimatedSwitcher(
-                duration: AppMotion.base,
-                switchInCurve: AppMotion.soft,
-                switchOutCurve: AppMotion.exit,
-                transitionBuilder: (child, animation) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
-                child: titleWidget,
-              ),
-              titleSpacing: showBackToProfile ? 0 : 16,
+              // Keep one title in one fixed slot. Fading the Home logo out
+              // while fading the destination title in made it flash on return.
+              title: _yieldToSearch(titleWidget),
+              titleSpacing: 16,
               actions: [
                 if (showHomeActions) ...[
-                  _HeaderCircleButton(
-                    tooltip: 'Search',
-                    circleKey: searchButtonKey,
-                    onPressed: () {
-                      final box =
-                          searchButtonKey.currentContext?.findRenderObject()
-                              as RenderBox?;
-                      Rect? origin;
-                      if (box != null && box.hasSize) {
-                        origin = box.localToGlobal(Offset.zero) & box.size;
-                      }
-                      showPatternSearch(context, origin: origin);
-                    },
-                    background: AppColors.card,
-                    border: AppColors.border,
-                    child: const Icon(
-                      Icons.search,
-                      size: 20,
-                      color: AppColors.accent,
+                  IgnorePointer(
+                    ignoring: _searchOpen,
+                    child: Opacity(
+                      opacity: _searchOpen ? 0 : 1,
+                      child: _HeaderCircleButton(
+                        tooltip: 'Search',
+                        circleKey: AppShell.searchButtonKey,
+                        onPressed: _openSearch,
+                        background: AppColors.card,
+                        border: AppColors.border,
+                        child: const Icon(
+                          Icons.search,
+                          size: 20,
+                          color: AppColors.accent,
+                        ),
+                      ),
                     ),
                   ),
                   if (showSubmit)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: HeaderAccentButton(
-                        label: 'Submit',
-                        icon: Icons.add_rounded,
-                        tooltip: 'Submit a pattern',
-                        onPressed: () => context.go('/submit'),
+                    _yieldToSearch(
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: HeaderAccentButton(
+                          label: 'Submit',
+                          icon: Icons.add_rounded,
+                          tooltip: 'Submit a pattern',
+                          onPressed: () => openSubmit(context),
+                        ),
                       ),
+                      direction: 1,
                     ),
                   const SizedBox(width: 12),
                 ],
@@ -244,13 +312,13 @@ class AppShell extends ConsumerWidget {
                       label: 'Submit',
                       icon: Icons.add_rounded,
                       tooltip: 'Submit a pattern',
-                      onPressed: () => context.go('/submit'),
+                      onPressed: () => openSubmit(context),
                     ),
                   ),
                 ],
               ],
             ),
-      body: navigationShell,
+      body: widget.navigationShell,
       bottomNavigationBar: hideBottomNav
           ? null
           : _BrandBottomNav(

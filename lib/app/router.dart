@@ -54,7 +54,7 @@ Page<void> _fadePage({required LocalKey key, required Widget child}) {
   return CustomTransitionPage<void>(
     key: key,
     child: child,
-    transitionDuration: AppMotion.base,
+    transitionDuration: AppMotion.fast,
     reverseTransitionDuration: AppMotion.fast,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       final curved = CurvedAnimation(
@@ -62,7 +62,16 @@ Page<void> _fadePage({required LocalKey key, required Widget child}) {
         curve: AppMotion.soft,
         reverseCurve: AppMotion.exit,
       );
-      return FadeTransition(opacity: curved, child: child);
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.015),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        ),
+      );
     },
   );
 }
