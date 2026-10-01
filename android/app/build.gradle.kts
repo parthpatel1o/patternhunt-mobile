@@ -24,7 +24,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.patternhunt.patternhunt_mobile"
+        applicationId = "com.patternhunt.patternhuntMobile"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -46,13 +46,15 @@ android {
         release {
             // Prefer upload keystore when android/key.properties exists; otherwise debug
             // so local `flutter run --release` still works before you create a keystore.
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            signingConfig = signingConfigs.getByName("release")
         }
     }
+}
+
+dependencies {
+    // uCrop (used by image_cropper) references OkHttp without declaring it
+    // as a transitive dependency, so include it explicitly for release builds.
+    implementation("com.squareup.okhttp3:okhttp:3.12.13")
 }
 
 kotlin {
