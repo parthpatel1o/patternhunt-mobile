@@ -27,6 +27,9 @@ import 'hunt_demo_pattern.dart';
 import 'hunt_deck_layout.dart';
 import 'hunt_show_filter.dart';
 import 'hunt_storage.dart';
+import 'hunt_view_queue.dart';
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum _HuntPhase { boot, setup, hunting, end }
 
@@ -89,7 +92,8 @@ class HuntScreen extends ConsumerStatefulWidget {
   ConsumerState<HuntScreen> createState() => _HuntScreenState();
 }
 
-class _HuntScreenState extends ConsumerState<HuntScreen> {
+class _HuntScreenState extends ConsumerState<HuntScreen>
+    with WidgetsBindingObserver {
   final _storage = HuntStorage();
   final List<PatternCard> _demoPatterns = createHuntDemoPatterns();
   int _demoIndex = 0;
@@ -102,7 +106,8 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
   bool _freeOnly = false;
   String _seed = '';
   final Set<String> _recordedViews = {};
-  final Set<Future<void>> _pendingViews = {};
+  HuntViewQueue? _viewQueue;
+  final Map<String, String> _viewAccessTokens = {};
   List<PatternCard> _patterns = const [];
   int _pageOffset = 0;
   int _index = 0;
@@ -130,7 +135,21 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_boot());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Sync on backgrounding/resuming; persisted views survive abrupt closure.
+    unawaited(_viewQueue?.flush() ?? Future<void>.value());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_viewQueue?.stop() ?? Future<void>.value());
+    super.dispose();
   }
 
   Future<void> _boot() async {
@@ -184,7 +203,29 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
   }
 
   Future<_HuntPage> _fetchPage(int offset) async {
-    await Future.wait(_pendingViews.toList());
+    if (!mounted) throw StateError("Hunt closed");
+    final session = ref.read(sessionProvider);
+    if (session != null) {
+      _viewAccessTokens[session.user.id] = session.accessToken;
+      if (_viewQueue?.userId != session.user.id) {
+        await _viewQueue?.stop();
+        final preferences = await SharedPreferences.getInstance();
+        if (!mounted) throw StateError("Hunt closed");
+        final api = ref.read(apiClientProvider);
+        _viewQueue = HuntViewQueue(session.user.id, preferences, (ids) async {
+          await api.post(
+            '/hunt/view',
+            data: {'patternIds': ids},
+            accessToken: _viewAccessTokens[session.user.id],
+          );
+        });
+        _viewQueue!.start();
+      }
+      await _viewQueue!.flush();
+    } else {
+      await _viewQueue?.stop();
+      _viewQueue = null;
+    }
     if (!mounted) throw StateError("Hunt closed");
     return ref
         .read(apiClientProvider)
@@ -214,6 +255,11 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
                     (item) =>
                         PatternCard.fromJson(item as Map<String, dynamic>),
                   )
+                  .where(
+                    (pattern) =>
+                        _show == 'all' ||
+                        !(_viewQueue?.pendingIds.contains(pattern.id) ?? false),
+                  )
                   .toList(),
               hasMore: data['hasMore'] as bool? ?? false,
               nextOffset: data['nextOffset'] as int?,
@@ -237,7 +283,10 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
       _phase = _HuntPhase.hunting;
     });
     try {
-      final page = await _fetchPage(offset);
+      var page = await _fetchPage(offset);
+      while (page.patterns.isEmpty && page.hasMore && page.nextOffset != null) {
+        page = await _fetchPage(page.nextOffset!);
+      }
       if (!mounted) return;
       setState(() {
         if (offset == 0) {
@@ -318,21 +367,12 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     }
     final session = ref.read(sessionProvider);
     if (session == null) return;
+    if (_viewQueue?.userId != session.user.id) return;
     final patternId = _patterns[_index].id;
     final key = '${session.user.id}:$patternId';
     if (!_recordedViews.add(key)) return;
-    late final Future<void> pending;
-    pending = ref
-        .read(apiClientProvider)
-        .post('/hunt/view', data: {'patternId': patternId})
-        .then<void>((_) {})
-        .catchError((Object _) {
-          _recordedViews.remove(key);
-        })
-        .whenComplete(() {
-          _pendingViews.remove(pending);
-        });
-    _pendingViews.add(pending);
+    _viewAccessTokens[session.user.id] = session.accessToken;
+    _viewQueue?.record(patternId);
   }
 
   Future<void> _movePattern(int delta) async {

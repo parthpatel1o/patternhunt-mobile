@@ -15,6 +15,8 @@ class _HuntApi extends ApiClient {
   final voted = <String>{'pattern-0'};
   final queries = <Map<String, dynamic>>[];
   final viewCalls = <String>[];
+  bool failViews = false;
+  final viewBatches = <List<String>>[];
 
   @override
   Future<T> getData<T>(
@@ -62,9 +64,11 @@ class _HuntApi extends ApiClient {
     String? accessToken,
   }) async {
     if (path == '/hunt/view') {
-      final id = data['patternId'] as String;
-      viewed.add(id);
-      viewCalls.add(id);
+      if (failViews) throw Exception('offline');
+      final ids = (data['patternIds'] as List).cast<String>();
+      viewBatches.add(ids);
+      viewed.addAll(ids);
+      viewCalls.addAll(ids);
     }
     if (path.endsWith('/vote')) {
       final id = path.split('/')[2];
@@ -153,12 +157,24 @@ void main() {
       addTearDown(tester.view.reset);
       final api = _HuntApi();
       await _mount(tester, api);
-      expect(api.viewed, {'pattern-1'}); // The next-card peek is not a view.
+      expect(api.viewed, isEmpty); // Small batches are kept locally.
+      expect(
+        (await SharedPreferences.getInstance()).getStringList(
+          'hunt.pendingViews.v1:me',
+        ),
+        ['pattern-1'],
+      );
       await _swipe(tester, const Offset(-220, 0));
-      expect(api.viewed, {'pattern-1', 'pattern-2'});
+      expect(api.viewed, isEmpty);
       await _swipe(tester, const Offset(-220, 0));
       expect(api.queries.last['offset'], 3); // Follow the server cursor.
-      expect(api.viewed, {'pattern-1', 'pattern-2', 'pattern-3'});
+      expect(api.viewed, {'pattern-1', 'pattern-2'});
+      expect(
+        (await SharedPreferences.getInstance()).getStringList(
+          'hunt.pendingViews.v1:me',
+        ),
+        ['pattern-3'],
+      );
       await _swipe(tester, const Offset(-220, 0));
       expect(find.text('Hunt complete'), findsOneWidget);
       expect(
@@ -197,7 +213,12 @@ void main() {
       await _mount(tester, api);
       await _swipe(tester, const Offset(0, -200));
       expect(api.voted, contains('pattern-1'));
-      expect(api.viewCalls.last, 'pattern-2');
+      expect(
+        (await SharedPreferences.getInstance()).getStringList(
+          'hunt.pendingViews.v1:me',
+        ),
+        ['pattern-1', 'pattern-2'],
+      );
 
       Finder frontCard(String id) => find.ancestor(
         of: find
@@ -227,6 +248,40 @@ void main() {
     },
   );
 
+  testWidgets('backgrounding flushes the current small batch', (tester) async {
+    addTearDown(tester.view.reset);
+    final api = _HuntApi();
+    await _mount(tester, api);
+    expect(api.viewBatches, isEmpty);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pumpAndSettle();
+    expect(api.viewBatches, [
+      ['pattern-1'],
+    ]);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'unsent local views are hidden on re-entry even if sending fails',
+    (tester) async {
+      addTearDown(tester.view.reset);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('hunt.pendingViews.v1:me', [
+        'pattern-1',
+        'pattern-2',
+      ]);
+      final api = _HuntApi()..failViews = true;
+      await _mount(tester, api);
+      expect(api.queries.map((query) => query['offset']), [0, 3]);
+      expect(find.text('Pattern 1'), findsNothing);
+      expect(find.text('Pattern 2'), findsNothing);
+      expect(find.text('Pattern 3'), findsOneWidget);
+      expect(api.viewed, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('tutorial and preload cards are not counted as viewed', (
     tester,
   ) async {
@@ -237,7 +292,13 @@ void main() {
     expect(api.viewed, isEmpty);
     await tester.tap(find.text('Skip'));
     await tester.pumpAndSettle();
-    expect(api.viewed, {'pattern-1'});
+    expect(api.viewed, isEmpty);
+    expect(
+      (await SharedPreferences.getInstance()).getStringList(
+        'hunt.pendingViews.v1:me',
+      ),
+      ['pattern-1'],
+    );
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
