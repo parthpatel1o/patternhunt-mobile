@@ -101,6 +101,8 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
   String _show = kDefaultHuntShowFilter;
   bool _freeOnly = false;
   String _seed = '';
+  final Set<String> _recordedViews = {};
+  final Set<Future<void>> _pendingViews = {};
   List<PatternCard> _patterns = const [];
   int _pageOffset = 0;
   int _index = 0;
@@ -135,32 +137,23 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     final constants = AppConstants.instance;
     final results = await Future.wait<Object?>([
       _storage.readTutorialSeen(),
-      _storage.readHuntRun(),
       _storage.readShow(),
+      _storage.readHuntRun(),
     ]);
     if (!mounted) return;
 
     _tutorialSeen = results[0]! as bool;
-    final run = results[1] as HuntRun?;
-    final storedShow = results[2]! as String;
+    final storedShow = results[1]! as String;
+    final previous = results[2] as HuntRun?;
     final profileCategory = ref
         .read(profileProvider)
         .valueOrNull
         ?.lastRankBoardCategorySlug;
     final rememberedCategory = ref.read(rememberedRankBoardCategoryProvider);
 
-    if (run != null) {
-      _category = run.category;
-      _order = run.order;
-      _period = run.period;
-      _show = run.show;
-      _freeOnly = run.freeOnly;
-      _seed = run.seed;
-      final pageSize = constants.huntPageSize;
-      final offset = (run.index ~/ pageSize) * pageSize;
-      await _loadPage(offset: offset, targetAbsoluteIndex: run.index);
-      return;
-    }
+    // Re-entry starts a fresh deck; seen history is stored by the shared API.
+    await _storage.clearHuntRun();
+    if (!mounted) return;
 
     // Least friction (web parity): jump straight into a random hunt.
     _category = preferredRankBoardCategory(
@@ -168,11 +161,11 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
       profileCategory: profileCategory,
       fallback: constants.defaultHuntCategory,
     );
-    _order = constants.defaultHuntOrder;
-    _period = kDefaultHuntPeriod;
+    _category = previous?.category ?? _category;
+    _order = previous?.order ?? constants.defaultHuntOrder;
+    _period = previous?.period ?? kDefaultHuntPeriod;
     _show = storedShow;
-    // Match web: setup/default freeOnly starts false (preference written on apply).
-    _freeOnly = false;
+    _freeOnly = previous?.freeOnly ?? false;
     await _startHunt();
   }
 
@@ -190,7 +183,9 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     };
   }
 
-  Future<_HuntPage> _fetchPage(int offset) {
+  Future<_HuntPage> _fetchPage(int offset) async {
+    await Future.wait(_pendingViews.toList());
+    if (!mounted) throw StateError("Hunt closed");
     return ref
         .read(apiClientProvider)
         .getData(
@@ -244,23 +239,25 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     try {
       final page = await _fetchPage(offset);
       if (!mounted) return;
-      if (page.patterns.isEmpty) {
-        setState(() {
-          _patterns = const [];
-          _phase = _HuntPhase.end;
-        });
-        return;
-      }
       setState(() {
-        _patterns = page.patterns;
-        _pageOffset = offset;
-        _index = (targetAbsoluteIndex - offset).clamp(
-          0,
-          page.patterns.length - 1,
-        );
+        if (offset == 0) {
+          _patterns = page.patterns;
+        } else {
+          final loadedIds = _patterns.map((pattern) => pattern.id).toSet();
+          _patterns = [
+            ..._patterns,
+            ...page.patterns.where(
+              (pattern) => !loadedIds.contains(pattern.id),
+            ),
+          ];
+        }
+        _pageOffset = 0;
+        _index = targetAbsoluteIndex.clamp(0, _patterns.length);
         _hasMore = page.hasMore;
         _nextOffset = page.nextOffset;
-        _phase = _HuntPhase.hunting;
+        _phase = _index >= _patterns.length
+            ? _HuntPhase.end
+            : _HuntPhase.hunting;
       });
       await _persistRun();
     } on ApiException catch (error) {
@@ -270,7 +267,10 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
         setState(() => _error = 'Couldn’t load patterns to hunt');
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        _recordCurrentView();
+      }
     }
   }
 
@@ -301,31 +301,56 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     );
   }
 
+  // Loaded cards remain available within this hunt, including new upvotes.
+  // The API excludes those upvotes when the customer starts another hunt.
+  int _adjacentIndex(int delta) {
+    final next = _index + delta;
+    return next >= 0 && next < _patterns.length ? next : -1;
+  }
+
+  void _recordCurrentView() {
+    if (!_tutorialSeen ||
+        _loading ||
+        _error != null ||
+        _phase != _HuntPhase.hunting ||
+        _index >= _patterns.length) {
+      return;
+    }
+    final session = ref.read(sessionProvider);
+    if (session == null) return;
+    final patternId = _patterns[_index].id;
+    final key = '${session.user.id}:$patternId';
+    if (!_recordedViews.add(key)) return;
+    late final Future<void> pending;
+    pending = ref
+        .read(apiClientProvider)
+        .post('/hunt/view', data: {'patternId': patternId})
+        .then<void>((_) {})
+        .catchError((Object _) {
+          _recordedViews.remove(key);
+        })
+        .whenComplete(() {
+          _pendingViews.remove(pending);
+        });
+    _pendingViews.add(pending);
+  }
+
   Future<void> _movePattern(int delta) async {
     if (_loading || _patterns.isEmpty) return;
-    final next = _index + delta;
-    if (next >= 0 && next < _patterns.length) {
+    final next = _adjacentIndex(delta);
+    if (next >= 0) {
       setState(() {
         _index = next;
         _peekPrevious = false;
       });
+      _recordCurrentView();
       await _persistRun();
       return;
     }
-
     if (delta > 0 && _hasMore) {
-      final offset = _nextOffset ?? (_pageOffset + _patterns.length);
+      final offset = _nextOffset ?? _patterns.length;
       setState(() => _peekPrevious = false);
-      await _loadPage(offset: offset, targetAbsoluteIndex: offset);
-      return;
-    }
-    if (delta < 0 && _pageOffset > 0) {
-      final offset = (_pageOffset - AppConstants.instance.huntPageSize).clamp(
-        0,
-        _pageOffset,
-      );
-      setState(() => _peekPrevious = false);
-      await _loadPage(offset: offset, targetAbsoluteIndex: _pageOffset - 1);
+      await _loadPage(offset: offset, targetAbsoluteIndex: _patterns.length);
       return;
     }
     if (delta > 0) {
@@ -458,6 +483,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
           _tutorialStep = 0;
           _tutorialTransitioning = false;
         });
+        _recordCurrentView();
       }
     } finally {
       _tutorialFinishing = false;
@@ -706,9 +732,9 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
               if (session != null) ...[
                 const SizedBox(height: 10),
                 _ShowCheckRow(
-                  label: 'Show already voted patterns',
-                  checked: huntShowIncludesVoted(_show),
-                  onTap: () => unawaited(_setShow(toggleHuntShowVoted(_show))),
+                  label: 'Show already viewed patterns',
+                  checked: huntShowIncludesViewed(_show),
+                  onTap: () => unawaited(_setShow(toggleHuntShowViewed(_show))),
                 ),
               ],
               const SizedBox(height: 22),
@@ -844,14 +870,14 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
       );
     }
 
-    if (_error != null && _patterns.isEmpty) {
+    if (_error != null) {
       return _MessageState(
         title: 'Couldn’t start the hunt',
         message: _error!,
         primaryLabel: 'Try again',
         onPrimary: () => _loadPage(
-          offset: _pageOffset,
-          targetAbsoluteIndex: _pageOffset + _index,
+          offset: _patterns.isEmpty ? 0 : (_nextOffset ?? 0),
+          targetAbsoluteIndex: _patterns.isEmpty ? 0 : _patterns.length,
         ),
         secondaryLabel: 'Change filters',
         onSecondary: _showFilters,
@@ -864,9 +890,13 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     final pattern = _patterns[_index];
     // Keep both peeks mounted when available so images stay warm; toggle
     // visibility instead of swapping a single card mid-swipe (web parity).
-    final PatternCard? prevPattern = _index > 0 ? _patterns[_index - 1] : null;
-    final PatternCard? nextPattern = _index + 1 < _patterns.length
-        ? _patterns[_index + 1]
+    final previousIndex = _adjacentIndex(-1);
+    final nextIndex = _adjacentIndex(1);
+    final PatternCard? prevPattern = previousIndex >= 0
+        ? _patterns[previousIndex]
+        : null;
+    final PatternCard? nextPattern = nextIndex >= 0
+        ? _patterns[nextIndex]
         : null;
     final showPrev = _peekPrevious;
 

@@ -43,8 +43,10 @@ class HuntStorage {
   static const _categoryKey = 'hunt.category';
   static const _orderKey = 'hunt.order';
   static const _periodKey = 'hunt.period';
-  /// Bumped when show-filter defaults / shape changed (voted-only checkbox).
-  static const _showKey = 'hunt.show.v5';
+
+  /// Bumped when show-filter defaults / shape changed (viewed-pattern checkbox).
+  static const _showKey = 'hunt.show.v6';
+
   /// Match web `hunt_free_v1`.
   static const _freeKey = 'hunt.free.v1';
   static const _runSeedKey = 'hunt.run.seed';
