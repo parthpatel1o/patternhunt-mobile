@@ -7,7 +7,20 @@ class AppTheme {
   /// Never use it as text, icon, or outline color on white / light surfaces.
   /// Interactive accents on light backgrounds use dark purple (`AppColors.accent`).
   static ThemeData light() {
-    final textTheme = GoogleFonts.plusJakartaSansTextTheme();
+    final baseTextTheme = GoogleFonts.plusJakartaSansTextTheme();
+    TextStyle heading(TextStyle? style) => GoogleFonts.plusJakartaSans(
+      textStyle: style,
+      fontWeight: FontWeight.w800,
+    );
+    final textTheme = baseTextTheme.copyWith(
+      displayLarge: heading(baseTextTheme.displayLarge),
+      displayMedium: heading(baseTextTheme.displayMedium),
+      displaySmall: heading(baseTextTheme.displaySmall),
+      headlineLarge: heading(baseTextTheme.headlineLarge),
+      headlineMedium: heading(baseTextTheme.headlineMedium),
+      headlineSmall: heading(baseTextTheme.headlineSmall),
+      titleLarge: heading(baseTextTheme.titleLarge),
+    );
     return ThemeData(
       useMaterial3: true,
       scaffoldBackgroundColor: AppColors.background,
@@ -38,7 +51,7 @@ class AppTheme {
         iconTheme: const IconThemeData(color: AppColors.accent),
         actionsIconTheme: const IconThemeData(color: AppColors.accent),
         titleTextStyle: textTheme.titleLarge?.copyWith(
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
           letterSpacing: -0.3,
           color: AppColors.accent,
         ),

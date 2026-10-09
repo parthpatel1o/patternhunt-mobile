@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/text/app_copy.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -27,11 +28,11 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
 
   Future<void> _submit() async {
     if (_password.text.length < 6) {
-      setState(() => _error = 'Password must be at least 6 characters.');
+      setState(() => _error = 'Password must be at least 6 characters');
       return;
     }
     if (_password.text != _confirm.text) {
-      setState(() => _error = 'Passwords do not match.');
+      setState(() => _error = 'Passwords do not match');
       return;
     }
 
@@ -47,7 +48,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
       ref.read(passwordRecoveryProvider.notifier).state = false;
       if (mounted) context.go('/');
     } on AuthException catch (e) {
-      setState(() => _error = e.message);
+      setState(() => _error = withoutSentenceFullStops(e.message));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -56,7 +57,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     final titleStyle = Theme.of(context).textTheme.titleLarge?.copyWith(
-      fontWeight: FontWeight.w700,
+      fontWeight: FontWeight.w800,
       color: AppColors.foreground,
     );
 
@@ -66,7 +67,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
         Text('Choose a new password', style: titleStyle),
         const SizedBox(height: 8),
         Text(
-          'Enter a new password for your Pattern Hunt account.',
+          'Enter a new password for your Pattern Hunt account',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
         ),
         const SizedBox(height: 24),

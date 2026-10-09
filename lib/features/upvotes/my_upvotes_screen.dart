@@ -130,7 +130,7 @@ class _UpvotesEmpty extends StatelessWidget {
   Widget build(BuildContext context) => AppEmptyState(
     emoji: '⬆️',
     title: 'No upvotes yet',
-    description: 'Upvote patterns you love and they’ll appear here.',
+    description: 'Upvote patterns you love and they’ll appear here',
     action: EmptyStatePillButton(
       label: 'Browse the rank board',
       filled: false,

@@ -596,13 +596,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
           if (!_isSearching) ...[
-            Text(
-              'Discover crochet patterns ranked by the community.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.w700, height: 1.25),
-            ),
-            const SizedBox(height: 14),
             CategoryDropdown(
               value: category ?? 'all',
               entries: [
@@ -660,7 +653,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             Text(
               'Results for “$searchQuery”',
               style: Theme.of(context).textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
+                  ?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 12),
           ],
@@ -899,11 +892,11 @@ class RankBoardRecovery extends StatelessWidget {
           const Text(
             'We couldn’t load the rank board',
             textAlign: TextAlign.center,
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
           ),
           const SizedBox(height: 8),
           const Text(
-            'Patterns are still there. Please try again in a moment.',
+            'Patterns are still there Please try again in a moment',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.muted),
           ),

@@ -62,10 +62,10 @@ class MineScreen extends ConsumerWidget {
                 const SizedBox(height: 24),
                 if (patterns.isEmpty)
                   AppEmptyState(
-                    title: isDesigner ? 'You haven’t submitted anything yet' : 'Register as a designer in Profile to submit patterns.',
+                    title: isDesigner ? 'You haven’t submitted anything yet' : 'Register as a designer in Profile to submit patterns',
                     description: isDesigner
-                        ? 'Submit a pattern and it will show up here. You can archive or delete it anytime.'
-                        : 'Once you turn on designer mode, your published patterns will appear in this list.',
+                        ? 'Submit a pattern and it will show up here You can archive or delete it anytime'
+                        : 'Once you turn on designer mode, your published patterns will appear in this list',
                     action: isDesigner
                         ? EmptyStatePillButton(
                             label: 'Submit a pattern',
@@ -114,7 +114,7 @@ class _MyPatternsHeader extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
           fontSize: 18,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
           height: 1.15,
           color: AppColors.foreground,
         ),
@@ -523,7 +523,7 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
       builder: (ctx) => AlertDialog(
         title: Text('Delete “${pattern.title}”?'),
         content: const Text(
-          'This pattern will be deleted forever. This cannot be undone.',
+          'This pattern will be deleted forever This cannot be undone',
         ),
         actions: [
           TextButton(

@@ -101,7 +101,7 @@ class BoardDetailScreen extends ConsumerWidget {
                                         .textTheme
                                         .displaySmall
                                         ?.copyWith(
-                                          fontWeight: FontWeight.w700,
+                                          fontWeight: FontWeight.w800,
                                           fontSize: 32,
                                         ),
                                   ),
@@ -179,8 +179,8 @@ class BoardDetailScreen extends ConsumerWidget {
                           emoji: '📁',
                           title: 'This folder is empty',
                           description: isDefaultFolder
-                              ? 'Bookmark a pattern to save it here.'
-                              : 'Bookmark a pattern and save it to “${board.name}”.',
+                              ? 'Bookmark a pattern to save it here'
+                              : 'Bookmark a pattern and save it to “${board.name}”',
                           action: EmptyStatePillButton(
                             label: 'Browse the rank board',
                             filled: true,

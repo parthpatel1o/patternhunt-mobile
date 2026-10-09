@@ -60,6 +60,21 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     super.dispose();
   }
 
+  void _resetForm() {
+    _title.clear();
+    _url.clear();
+    _designerName.clear();
+    setState(() {
+      _category = AppConstants.instance.categories.first.slug;
+      _isFree = false;
+      _images.clear();
+      _pdf = null;
+      _coverNotSquare = false;
+      _error = null;
+      _designerNameSynced = false;
+    });
+  }
+
   /// Compress a photo for upload. Keeps aspect ratio; longest side capped.
   Future<File> _compressImage(File file, {img.Image? decoded}) async {
     final bytes = decoded == null ? await file.readAsBytes() : null;
@@ -107,7 +122,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     final max = AppConstants.instance.maxPatternImages;
     final remaining = max - _images.length;
     if (remaining <= 0) {
-      showAppSnackBar(context, message: 'You can add up to $max photos.');
+      showAppSnackBar(context, message: 'You can add up to $max photos');
       return;
     }
 
@@ -142,7 +157,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
       if (prepared.length < limited.length && mounted) {
         showAppSnackBar(
           context,
-          message: 'We couldn’t read one of those images.',
+          message: 'We couldn’t read one of those images',
         );
       }
       if (!mounted) return;
@@ -368,7 +383,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     final file = File(path);
     if (file.lengthSync() > AppConstants.instance.maxPdfBytes) {
       if (mounted) {
-        showAppSnackBar(context, message: 'PDF must be 20 MB or smaller.');
+        showAppSnackBar(context, message: 'PDF must be 20 MB or smaller');
       }
       return;
     }
@@ -393,7 +408,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     );
     if (response.statusCode == null || response.statusCode! >= 300) {
       throw ApiException(
-        'Upload failed (${response.statusCode ?? 'unknown'}).',
+        'Upload failed (${response.statusCode ?? 'unknown'})',
       );
     }
   }
@@ -404,7 +419,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
     final designerName = _designerName.text.trim();
 
     if (needsDesignerName && designerName.length < 2) {
-      setState(() => _error = 'Enter your designer name.');
+      setState(() => _error = 'Enter your designer name');
       return;
     }
     if (title.length < 2) {
@@ -419,7 +434,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
       if (!mounted) return;
       setState(() {
         _coverNotSquare = true;
-        _error = 'Your cover image needs to be a square image.';
+        _error = 'Your cover image needs to be a square image';
       });
       return;
     }
@@ -459,10 +474,10 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
           .toList();
       final pdfSlot = urls['pdf'] as Map<String, dynamic>?;
       if (imageSlots.length != _images.length) {
-        throw ApiException('Could not prepare image uploads.');
+        throw ApiException('Could not prepare image uploads');
       }
       if (_isFree && _pdf != null && pdfSlot == null) {
-        throw ApiException('Could not prepare PDF upload.');
+        throw ApiException('Could not prepare PDF upload');
       }
 
       await Future.wait([
@@ -500,12 +515,17 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
       ref.invalidate(patternsProvider);
       ref.invalidate(profileProvider);
       if (mounted) {
+        final submittedCategory = _category;
+        // The navigation shell keeps this screen mounted between visits.
+        // Clear the completed draft before returning to the rank board.
+        _resetForm();
+        FocusManager.instance.primaryFocus?.unfocus();
         // Land on the past 7 days board and highlight the new pattern in place.
         context.go(
           Uri(
             path: '/',
             queryParameters: {
-              'category': _category,
+              'category': submittedCategory,
               'period': 'week',
               if (patternId != null && patternId.isNotEmpty)
                 'pattern': patternId,
@@ -513,12 +533,12 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
           ).toString(),
         );
         HapticFeedback.lightImpact();
-        showAppSnackBar(context, message: 'Your pattern has been added.');
+        showAppSnackBar(context, message: 'Your pattern has been added');
       }
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
-      if (mounted) setState(() => _error = 'We couldn’t save this pattern.');
+      if (mounted) setState(() => _error = 'We couldn’t save this pattern');
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -664,7 +684,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Choose one or more photos.',
+                'Choose one or more photos',
                 style: textTheme.bodySmall?.copyWith(color: AppColors.muted),
               ),
               const SizedBox(height: 12),
@@ -685,7 +705,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
               if (_coverNotSquare) ...[
                 const SizedBox(height: 10),
                 Text(
-                  'Your cover image needs to be a square image.',
+                  'Your cover image needs to be a square image',
                   style: textTheme.bodySmall?.copyWith(
                     color: Theme.of(context).colorScheme.error,
                   ),
@@ -698,8 +718,8 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
         _SubmitSection(
           title: 'Where to get it',
           hint: _isFree
-              ? 'Add a link, a PDF, or both.'
-              : 'Add the shop or listing link.',
+              ? 'Add a link, a PDF, or both'
+              : 'Add the shop or listing link',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -721,7 +741,7 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
                 fieldLabel('PDF'),
                 const SizedBox(height: 4),
                 Text(
-                  'Up to 20 MB.',
+                  'Up to 20 MB',
                   style: textTheme.bodySmall?.copyWith(color: AppColors.muted),
                 ),
                 const SizedBox(height: 10),
@@ -844,7 +864,7 @@ class _SubmitSection extends StatelessWidget {
           Text(
             title,
             style: Theme.of(context).textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w700, fontSize: 20),
+                ?.copyWith(fontWeight: FontWeight.w800, fontSize: 20),
           ),
           if (hint != null) ...[
             const SizedBox(height: 4),

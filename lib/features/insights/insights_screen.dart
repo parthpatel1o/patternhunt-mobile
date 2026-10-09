@@ -99,12 +99,12 @@ class InsightsScreen extends ConsumerWidget {
                 Text(
                   'Pattern breakdown',
                   style: Theme.of(context).textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w700),
+                      ?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 12),
                 if (insights.patterns.isEmpty)
                   Text(
-                    'Submit a pattern to start seeing insights here.',
+                    'Submit a pattern to start seeing insights here',
                     style: Theme.of(context).textTheme.bodyMedium
                         ?.copyWith(color: AppColors.muted),
                   )

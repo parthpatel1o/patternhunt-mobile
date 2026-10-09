@@ -24,6 +24,7 @@ import '../../shared/widgets/header_accent_button.dart';
 import '../../shared/widgets/in_app_webview.dart';
 import '../../shared/widgets/save_board_sheet.dart';
 import 'hunt_demo_pattern.dart';
+import 'hunt_deck_layout.dart';
 import 'hunt_show_filter.dart';
 import 'hunt_storage.dart';
 
@@ -266,7 +267,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'Couldn’t load patterns to hunt.');
+        setState(() => _error = 'Couldn’t load patterns to hunt');
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -546,7 +547,18 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
             Positioned.fill(
               child: Padding(
                 padding: const EdgeInsets.only(top: _topBarHeight),
-                child: content,
+                child:
+                    MediaQuery.sizeOf(context).width >=
+                            huntWideLayoutBreakpoint &&
+                        (_phase == _HuntPhase.setup ||
+                            (_phase == _HuntPhase.end && !showTutorialSurface))
+                    ? Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 640),
+                          child: content,
+                        ),
+                      )
+                    : content,
               ),
             ),
           ],
@@ -571,7 +583,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 22,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     height: 1.1,
                     color: AppColors.foreground,
                   ),
@@ -778,99 +790,10 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
           : null;
       final showPrev = _peekPrevious;
 
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-        child: Stack(
-          fit: StackFit.expand,
-          clipBehavior: Clip.none,
-          children: [
-            // Peek underlay so swipe-left reveals a different demo pattern.
-            if (nextPattern != null)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Opacity(
-                    opacity: showPrev ? 0 : 1,
-                    child: _HuntPatternCard(
-                      key: ValueKey(nextPattern.id),
-                      pattern: nextPattern,
-                      period: _period,
-                      interactive: false,
-                      onPreviousPattern: () {},
-                      onNextPattern: () {},
-                    ),
-                  ),
-                ),
-              ),
-            if (prevPattern != null)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Opacity(
-                    opacity: showPrev ? 1 : 0,
-                    child: _HuntPatternCard(
-                      key: ValueKey(prevPattern.id),
-                      pattern: prevPattern,
-                      period: _period,
-                      interactive: false,
-                      onPreviousPattern: () {},
-                      onNextPattern: () {},
-                    ),
-                  ),
-                ),
-              ),
-            Positioned.fill(
-              child: _HuntPatternCard(
-                key: ValueKey(pattern.id),
-                pattern: pattern,
-                period: _period,
-                tutorialMode: true,
-                tutorialStep: _tutorialStep,
-                onPreviousPattern: () => _moveDemoPattern(-1),
-                onNextPattern: () => _moveDemoPattern(1),
-                onGesture: _onTutorialGesture,
-                onDragX: _onFrontDragX,
-                onPeekSide: _onFrontPeekSide,
-              ),
-            ),
-            _TutorialCoach(step: _tutorialStep, onSkip: _finishTutorial),
-          ],
-        ),
-      );
-    }
-
-    if (_error != null && _patterns.isEmpty) {
-      return _MessageState(
-        title: 'Couldn’t start the hunt',
-        message: _error!,
-        primaryLabel: 'Try again',
-        onPrimary: () => _loadPage(
-          offset: _pageOffset,
-          targetAbsoluteIndex: _pageOffset + _index,
-        ),
-        secondaryLabel: 'Change filters',
-        onSecondary: _showFilters,
-      );
-    }
-    if (_patterns.isEmpty || _loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final pattern = _patterns[_index];
-    // Keep both peeks mounted when available so images stay warm; toggle
-    // visibility instead of swapping a single card mid-swipe (web parity).
-    final PatternCard? prevPattern = _index > 0 ? _patterns[_index - 1] : null;
-    final PatternCard? nextPattern = _index + 1 < _patterns.length
-        ? _patterns[_index + 1]
-        : null;
-    final showPrev = _peekPrevious;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-      child: Stack(
-        fit: StackFit.expand,
-        clipBehavior: Clip.none,
-        children: [
-          // Stable ValueKey(pattern.id) so peek→front (and front→peek) reuse
-          // the same State/images instead of remounting mid-swipe.
+      return HuntDeckLayout(
+        coach: _TutorialCoach(step: _tutorialStep, onSkip: _finishTutorial),
+        cards: [
+          // Peek underlay so swipe-left reveals a different demo pattern.
           if (nextPattern != null)
             Positioned.fill(
               child: IgnorePointer(
@@ -908,16 +831,95 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
               key: ValueKey(pattern.id),
               pattern: pattern,
               period: _period,
-              onPreviousPattern: () => _movePattern(-1),
-              onNextPattern: () => _movePattern(1),
-              onUpvoteAdvance: _goNextAfterUpvote,
+              tutorialMode: true,
+              tutorialStep: _tutorialStep,
+              onPreviousPattern: () => _moveDemoPattern(-1),
+              onNextPattern: () => _moveDemoPattern(1),
+              onGesture: _onTutorialGesture,
               onDragX: _onFrontDragX,
               onPeekSide: _onFrontPeekSide,
-              onVoteChange: _updateCurrentVote,
             ),
           ),
         ],
-      ),
+      );
+    }
+
+    if (_error != null && _patterns.isEmpty) {
+      return _MessageState(
+        title: 'Couldn’t start the hunt',
+        message: _error!,
+        primaryLabel: 'Try again',
+        onPrimary: () => _loadPage(
+          offset: _pageOffset,
+          targetAbsoluteIndex: _pageOffset + _index,
+        ),
+        secondaryLabel: 'Change filters',
+        onSecondary: _showFilters,
+      );
+    }
+    if (_patterns.isEmpty || _loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final pattern = _patterns[_index];
+    // Keep both peeks mounted when available so images stay warm; toggle
+    // visibility instead of swapping a single card mid-swipe (web parity).
+    final PatternCard? prevPattern = _index > 0 ? _patterns[_index - 1] : null;
+    final PatternCard? nextPattern = _index + 1 < _patterns.length
+        ? _patterns[_index + 1]
+        : null;
+    final showPrev = _peekPrevious;
+
+    return HuntDeckLayout(
+      cards: [
+        // Stable ValueKey(pattern.id) so peek→front (and front→peek) reuse
+        // the same State/images instead of remounting mid-swipe.
+        if (nextPattern != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: showPrev ? 0 : 1,
+                child: _HuntPatternCard(
+                  key: ValueKey(nextPattern.id),
+                  pattern: nextPattern,
+                  period: _period,
+                  interactive: false,
+                  onPreviousPattern: () {},
+                  onNextPattern: () {},
+                ),
+              ),
+            ),
+          ),
+        if (prevPattern != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: showPrev ? 1 : 0,
+                child: _HuntPatternCard(
+                  key: ValueKey(prevPattern.id),
+                  pattern: prevPattern,
+                  period: _period,
+                  interactive: false,
+                  onPreviousPattern: () {},
+                  onNextPattern: () {},
+                ),
+              ),
+            ),
+          ),
+        Positioned.fill(
+          child: _HuntPatternCard(
+            key: ValueKey(pattern.id),
+            pattern: pattern,
+            period: _period,
+            onPreviousPattern: () => _movePattern(-1),
+            onNextPattern: () => _movePattern(1),
+            onUpvoteAdvance: _goNextAfterUpvote,
+            onDragX: _onFrontDragX,
+            onPeekSide: _onFrontPeekSide,
+            onVoteChange: _updateCurrentVote,
+          ),
+        ),
+      ],
     );
   }
 
@@ -925,7 +927,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     if (_patterns.isEmpty) {
       return _MessageState(
         title: 'Nothing to hunt here',
-        message: 'Try another category or rank board, or check back once more patterns are published.',
+        message: 'Try another category or rank board, or check back once more patterns are published',
         primaryLabel: 'Change filters',
         onPrimary: _showFilters,
       );
@@ -934,7 +936,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen> {
     final countLabel = count == 1 ? '1 pattern' : '$count patterns';
     return _MessageState(
       title: 'Hunt complete',
-      message: 'You’ve hunted through $countLabel in this run.',
+      message: 'You’ve hunted through $countLabel in this run',
       primaryLabel: 'Hunt again',
       onPrimary: _restart,
       secondaryLabel: 'Change filters',
@@ -1991,10 +1993,59 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     final rank = _isDemo ? null : pattern.allTimeRank;
     final (pillBg, pillFg) = _pricePillColors(rank);
 
+    final tabletLayout =
+        MediaQuery.sizeOf(context).width >= huntWideLayoutBreakpoint;
+    final photo = AspectRatio(
+      aspectRatio: 1,
+      child: _HuntGallery(
+        key: ValueKey('hunt-photo-${pattern.id}'),
+        images: images,
+        imageIndex: _imageIndex,
+        heartPop: widget.interactive && _heartPop,
+        upvoteDragProgress: widget.interactive ? _upvoteDragProgress : 0,
+        onTapSide: widget.interactive ? _handlePhotoTap : (_) {},
+        cardCoach: cardCoach,
+      ),
+    );
+    final photoSection = _maybePan(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (images.length > 1)
+              Row(
+                children: [
+                  for (var index = 0; index < images.length; index++) ...[
+                    if (index > 0) const SizedBox(width: 6),
+                    Expanded(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: index == _imageIndex
+                              ? AppColors.accent
+                              : AppColors.border,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              )
+            else
+              const SizedBox(height: 6),
+            const SizedBox(height: 12),
+            if (tabletLayout) Expanded(child: Center(child: photo)) else photo,
+          ],
+        ),
+      ),
+    );
+
     final cardBody = Container(
-      clipBehavior: (_showSwipeHint || _showSlideUpHint)
-          ? Clip.none
-          : Clip.antiAlias,
+      // Keep the clip wrapper mounted when a hint hands off to a live drag.
+      // Switching from Clip.none replaces the pan recognizer mid-gesture.
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(22),
@@ -2004,52 +2055,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _maybePan(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (images.length > 1)
-                    Row(
-                      children: [
-                        for (var index = 0; index < images.length; index++) ...[
-                          if (index > 0) const SizedBox(width: 6),
-                          Expanded(
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 180),
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: index == _imageIndex
-                                    ? AppColors.accent
-                                    : AppColors.border,
-                                borderRadius: BorderRadius.circular(99),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    )
-                  else
-                    const SizedBox(height: 6),
-                  const SizedBox(height: 12),
-                  AspectRatio(
-                    aspectRatio: 1,
-                    child: _HuntGallery(
-                      images: images,
-                      imageIndex: _imageIndex,
-                      heartPop: widget.interactive && _heartPop,
-                      upvoteDragProgress: widget.interactive
-                          ? _upvoteDragProgress
-                          : 0,
-                      onTapSide: widget.interactive ? _handlePhotoTap : (_) {},
-                      cardCoach: cardCoach,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          if (tabletLayout) Expanded(child: photoSection) else photoSection,
           Container(
             decoration: const BoxDecoration(
               border: Border(top: BorderSide(color: AppColors.border)),
@@ -2169,7 +2175,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
                   child: _isDemo && !widget.tutorialMode && widget.interactive
                       ? const Text(
-                          'Try the gestures on this card — nothing is saved until you start hunting.',
+                          'Try the gestures on this card — nothing is saved until you start hunting',
                           style: TextStyle(
                             color: AppColors.muted,
                             fontSize: 13,
@@ -2325,7 +2331,8 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
               ],
             ),
           ),
-          Expanded(child: _maybePan(child: const SizedBox.expand())),
+          if (!tabletLayout)
+            Expanded(child: _maybePan(child: const SizedBox.expand())),
         ],
       ),
     );
@@ -2379,6 +2386,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
 
 class _HuntGallery extends StatelessWidget {
   const _HuntGallery({
+    super.key,
     required this.images,
     required this.imageIndex,
     required this.heartPop,
@@ -2891,12 +2899,12 @@ const _tutorialMessages = <(String, String, String)>[
   ),
   (
     'Next photo',
-    'Tap the right side of the image to see the next photo.',
+    'Tap the right side of the image to see the next photo',
     'Tap the right side to continue',
   ),
   (
     'Previous photo',
-    'Tap the left side of the image to see the previous photo.',
+    'Tap the left side of the image to see the previous photo',
     'Tap the left side to continue',
   ),
   (
@@ -2924,87 +2932,82 @@ class _TutorialCoach extends StatelessWidget {
 
     // Sibling of the card Stack in `_buildHunting` (web HuntGestureTutorial);
     // not parented under card transforms, so idle swipe/slide won't move it.
-    return Positioned(
-      left: 12,
-      right: 12,
-      bottom: 12,
-      child: Material(
-        color: AppColors.accent.withValues(alpha: 0.98),
-        borderRadius: BorderRadius.circular(18),
-        elevation: 12,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    '${step + 1} of 5',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.6,
-                    ),
+    return Material(
+      color: AppColors.accent.withValues(alpha: 0.98),
+      borderRadius: BorderRadius.circular(18),
+      elevation: 12,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  '${step + 1} of 5',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
                   ),
-                  const SizedBox(width: 10),
-                  for (var i = 0; i < 5; i++) ...[
-                    if (i > 0) const SizedBox(width: 4),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      width: 16,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: i == step
-                            ? Colors.white
-                            : Colors.white.withValues(
-                                alpha: i < step ? 0.55 : 0.25,
-                              ),
-                        borderRadius: BorderRadius.circular(99),
-                      ),
+                ),
+                const SizedBox(width: 10),
+                for (var i = 0; i < 5; i++) ...[
+                  if (i > 0) const SizedBox(width: 4),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: 16,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: i == step
+                          ? Colors.white
+                          : Colors.white.withValues(
+                              alpha: i < step ? 0.55 : 0.25,
+                            ),
+                      borderRadius: BorderRadius.circular(99),
                     ),
-                  ],
-                  const Spacer(),
-                  TextButton(
-                    onPressed: () => unawaited(onSkip()),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.white70,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    child: const Text('Skip'),
                   ),
                 ],
-              ),
-              Text(
-                item.$1,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
+                const Spacer(),
+                TextButton(
+                  onPressed: () => unawaited(onSkip()),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text('Skip'),
                 ),
+              ],
+            ),
+            Text(
+              item.$1,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
               ),
-              const SizedBox(height: 4),
-              Text(
-                item.$2,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.8),
-                  fontSize: 13,
-                  height: 1.35,
-                ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              item.$2,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.8),
+                fontSize: 13,
+                height: 1.35,
               ),
-              const SizedBox(height: 8),
-              Text(
-                item.$3,
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              item.$3,
+              style: const TextStyle(
+                color: AppColors.primary,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -3017,24 +3020,19 @@ class _TutorialEnjoyHandoff extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Positioned(
-      left: 12,
-      right: 12,
-      bottom: 12,
-      child: Material(
-        color: AppColors.accent,
-        borderRadius: BorderRadius.circular(22),
-        elevation: 12,
-        child: const Padding(
-          padding: EdgeInsets.fromLTRB(24, 32, 24, 32),
-          child: Text(
-            'Enjoy hunting patterns!',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-            ),
+    return Material(
+      color: AppColors.accent,
+      borderRadius: BorderRadius.circular(22),
+      elevation: 12,
+      child: const Padding(
+        padding: EdgeInsets.fromLTRB(24, 32, 24, 32),
+        child: Text(
+          'Enjoy hunting patterns!',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
           ),
         ),
       ),

@@ -56,10 +56,16 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Supabase's app_links plugin owns auth callbacks, not the Flutter router. -->
+	<key>FlutterDeepLinkingEnabled</key>
+	<false/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Choose photos for your pattern submissions.</string>
+	<string>Choose photos for your pattern submissions</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Take photos for your pattern submissions.</string>
+	<string>Take photos for your pattern submissions</string>
+	<!-- The photo picker's camera dependency references optional photo geotagging APIs. -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Pattern Hunt does not use or collect your location and location access is not required to browse patterns or submit photos</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>UILaunchStoryboardName</key>

@@ -18,7 +18,7 @@ void main() {
 
       expect(find.text('We couldn’t load the rank board'), findsOneWidget);
       expect(
-        find.text('Patterns are still there. Please try again in a moment.'),
+        find.text('Patterns are still there Please try again in a moment'),
         findsOneWidget,
       );
       expect(find.text('Nothing to show'), findsNothing);

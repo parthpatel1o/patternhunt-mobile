@@ -25,11 +25,11 @@ Future<void> showCreateFolderDialog(BuildContext context, WidgetRef ref) async {
             Text(
               'New folder',
               style: Theme.of(ctx).textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w700),
+                  ?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 4),
             Text(
-              'Name your folder, then bookmark patterns to add them here.',
+              'Name your folder, then bookmark patterns to add them here',
               style: Theme.of(ctx).textTheme.bodySmall
                   ?.copyWith(color: AppColors.muted),
             ),
@@ -96,7 +96,7 @@ Future<void> showCreateFolderDialog(BuildContext context, WidgetRef ref) async {
     if (context.mounted) {
       showAppSnackBar(
         context,
-        message: '“$kDefaultBoardName” is reserved for your default folder.',
+        message: '“$kDefaultBoardName” is reserved for your default folder',
       );
     }
     return;

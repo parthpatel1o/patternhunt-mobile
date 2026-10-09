@@ -30,11 +30,11 @@ Future<void> showRenameFolderDialog(
               style: Theme.of(ctx)
                   .textTheme
                   .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w700),
+                  ?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 4),
             Text(
-              'Choose a new name for this folder.',
+              'Choose a new name for this folder',
               style: Theme.of(ctx)
                   .textTheme
                   .bodySmall

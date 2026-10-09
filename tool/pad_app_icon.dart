@@ -1,51 +1,112 @@
+import 'dart:convert';
 import 'dart:io';
-import 'package:image/image.dart';
+import 'dart:ui' as ui;
 
+import 'package:flutter_test/flutter_test.dart';
+import 'package:patternhunt_mobile/shared/branding/brand_mark_paths.dart';
+
+/// Exports the actual vector curves through Flutter's native graphics engine.
+/// Run from the project root: flutter test tool/pad_app_icon.dart.
 void main() {
-  final src = decodeImage(File('assets/splash_logo.png').readAsBytesSync())!;
-  var minX = src.width, minY = src.height, maxX = 0, maxY = 0;
-  for (var y = 0; y < src.height; y++) {
-    for (var x = 0; x < src.width; x++) {
-      final p = src.getPixel(x, y);
-      final r = p.r.toInt(), g = p.g.toInt(), b = p.b.toInt();
-      if (!(r > 245 && g > 245 && b > 245)) {
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x > maxX) maxX = x;
-        if (y > maxY) maxY = y;
+  test('Export shared brand assets', () async {
+    await _write('assets/app_icon.png', 1024, launcher: true);
+    await _write('assets/splash_logo.png', 1024);
+    await _write('assets/logo.png', 1024, background: 0xFFF8F6FA);
+
+    const iosDirectory = 'ios/Runner/Assets.xcassets/AppIcon.appiconset';
+    final contents = jsonDecode(
+      File('$iosDirectory/Contents.json').readAsStringSync(),
+    ) as Map<String, dynamic>;
+    final written = <String>{};
+    for (final entry in contents['images'] as List) {
+      final image = entry as Map<String, dynamic>;
+      final filename = image['filename'] as String;
+      if (!written.add(filename)) continue;
+      final points = double.parse((image['size'] as String).split('x').first);
+      final density = double.parse(
+        (image['scale'] as String).replaceAll('x', ''),
+      );
+      await _write(
+        '$iosDirectory/$filename',
+        (points * density).round(),
+        launcher: true,
+      );
+    }
+    for (var density = 1; density <= 3; density++) {
+      final suffix = density == 1 ? '' : '@${density}x';
+      await _write(
+        'ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage$suffix.png',
+        168 * density,
+      );
+    }
+
+    const densities = {
+      'mdpi': 1.0,
+      'hdpi': 1.5,
+      'xhdpi': 2.0,
+      'xxhdpi': 3.0,
+      'xxxhdpi': 4.0,
+    };
+    for (final entry in densities.entries) {
+      final directory = 'android/app/src/main/res/mipmap-${entry.key}';
+      await _write(
+        '$directory/ic_launcher.png',
+        (48 * entry.value).round(),
+        launcher: true,
+      );
+      // The inner 72dp of a 108dp adaptive layer matches iOS's visible size.
+      await _write(
+        '$directory/ic_launcher_foreground.png',
+        (108 * entry.value).round(),
+        launcher: true,
+        viewport: (72 * entry.value).round(),
+      );
+      await _write(
+        'android/app/src/main/res/drawable-${entry.key}/splash_logo.png',
+        (192 * entry.value).round(),
+      );
+    }
+    for (final size in [16, 32, 64, 128, 256, 512, 1024]) {
+      await _write(
+        'macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_$size.png',
+        size,
+        launcher: true,
+      );
+    }
+    await _write('web/favicon.png', 32, launcher: true);
+    for (final size in [192, 512]) {
+      for (final prefix in ['Icon', 'Icon-maskable']) {
+        await _write('web/icons/$prefix-$size.png', size, launcher: true);
       }
     }
+  });
+}
+
+Future<void> _write(
+  String path,
+  int size, {
+  bool launcher = false,
+  int background = 0xFFFFFFFF,
+  int? viewport,
+}) async {
+  final recorder = ui.PictureRecorder();
+  final canvas = ui.Canvas(recorder);
+  canvas.drawColor(ui.Color(background), ui.BlendMode.src);
+  // Export the same Bezier paths used by the app; no polygon approximation.
+  if (launcher) {
+    final scale = (viewport ?? size) * 0.72 / 617;
+    canvas.translate(size / 2 - 512.5 * scale, size / 2 - 510.5 * scale);
+    canvas.scale(scale);
+  } else {
+    canvas.scale(size / 1024);
   }
-  const cropPad = 4;
-  minX = (minX - cropPad).clamp(0, src.width - 1);
-  minY = (minY - cropPad).clamp(0, src.height - 1);
-  maxX = (maxX + cropPad).clamp(0, src.width - 1);
-  maxY = (maxY + cropPad).clamp(0, src.height - 1);
-  final cropped = copyCrop(
-    src,
-    x: minX,
-    y: minY,
-    width: maxX - minX + 1,
-    height: maxY - minY + 1,
+  paintBrandMark(canvas);
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(size, size);
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+  await File(path).writeAsBytes(
+    bytes!.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
   );
-
-  const size = 1024;
-  const fraction = 0.48;
-  final target = (size * fraction).round();
-  final scale = target / (cropped.width > cropped.height ? cropped.width : cropped.height);
-  final nw = (cropped.width * scale).round();
-  final nh = (cropped.height * scale).round();
-  final mark = copyResize(
-    cropped,
-    width: nw,
-    height: nh,
-    interpolation: Interpolation.cubic,
-  );
-
-  final canvas = Image(width: size, height: size);
-  fill(canvas, color: ColorRgb8(255, 255, 255));
-  compositeImage(canvas, mark, dstX: (size - nw) ~/ 2, dstY: (size - nh) ~/ 2);
-
-  File('assets/app_icon.png').writeAsBytesSync(encodePng(canvas));
-  stdout.writeln('Wrote assets/app_icon.png mark=${nw}x$nh (~${(100 * (nw > nh ? nw : nh) / size).round()}%)');
+  image.dispose();
+  picture.dispose();
 }

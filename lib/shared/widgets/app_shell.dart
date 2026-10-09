@@ -9,6 +9,7 @@ import '../../features/saved/create_folder_dialog.dart';
 import '../../features/search/search_overlay.dart';
 import '../../features/submit/submit_navigation.dart';
 import 'header_accent_button.dart';
+import 'brand_logo.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.navigationShell});
@@ -207,14 +208,14 @@ class _AppShellState extends ConsumerState<AppShell> {
         ? Row(
             key: const ValueKey('title-home'),
             children: [
-              Image.asset('assets/logo.png', width: 38, height: 38),
+              const BrandLogo(),
               Expanded(
                 child: Text(
                   'Pattern Hunt',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     fontSize: 17,
                     height: 1.1,
                     color: AppColors.accent,
@@ -229,7 +230,7 @@ class _AppShellState extends ConsumerState<AppShell> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
               fontSize: useLargePageTitle ? 22 : 17,
               height: 1.1,
               color: AppColors.foreground,

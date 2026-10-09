@@ -94,7 +94,7 @@ class _SaveBoardSheetBodyState extends ConsumerState<_SaveBoardSheetBody> {
         showAppSnackBar(
           context,
           message:
-              '“$kDefaultBoardName” is reserved for your default folder.',
+              '“$kDefaultBoardName” is reserved for your default folder',
         );
       }
       return;
@@ -104,7 +104,7 @@ class _SaveBoardSheetBodyState extends ConsumerState<_SaveBoardSheetBody> {
       final api = ref.read(apiClientProvider);
       final created = await api.post('/boards', data: {'name': name});
       final boardId = created['boardId'] as String?;
-      if (boardId == null) throw ApiException('Could not create that folder.');
+      if (boardId == null) throw ApiException('Could not create that folder');
       final saved = await api.post(
         '/patterns/${widget.patternId}/save',
         data: {'boardId': boardId},
@@ -175,7 +175,7 @@ class _SaveBoardSheetBodyState extends ConsumerState<_SaveBoardSheetBody> {
                   child: Text(
                     boardsAsync.hasError
                         ? '${boardsAsync.error}'
-                        : 'Could not load folders.',
+                        : 'Could not load folders',
                     style: const TextStyle(
                       color: AppColors.muted,
                       fontSize: 13,

@@ -82,7 +82,7 @@ class _CreatorScreenState extends ConsumerState<CreatorScreen> {
                             creator.name!,
                             style: Theme.of(context).textTheme.displaySmall
                                 ?.copyWith(
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w800,
                                   fontSize: 32,
                                 ),
                           ),
@@ -140,11 +140,11 @@ class _CreatorScreenState extends ConsumerState<CreatorScreen> {
                         Text(
                           'No live patterns',
                           style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                              ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          '${creator.name} doesn’t have any patterns on the rank board right now.',
+                          '${creator.name} doesn’t have any patterns on the rank board right now',
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(color: AppColors.muted),

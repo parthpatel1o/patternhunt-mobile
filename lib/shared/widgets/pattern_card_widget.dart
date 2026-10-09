@@ -424,7 +424,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 8),
-              const Text('Tell us why this pattern needs review.'),
+              const Text('Tell us why this pattern needs review'),
               const SizedBox(height: 12),
               for (final item in const <(String, String)>[
                 ('copyright', 'Copyright or trademark issue'),
@@ -456,7 +456,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
       if (mounted) {
         showAppSnackBar(
           context,
-          message: 'Thanks — your report has been sent.',
+          message: 'Thanks — your report has been sent',
         );
       }
     } on ApiException catch (e) {
@@ -500,13 +500,13 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
           mode: LaunchMode.externalApplication,
         );
         if (!opened && mounted) {
-          showAppSnackBar(context, message: 'Could not open the PDF.');
+          showAppSnackBar(context, message: 'Could not open the PDF');
         }
       }
     } on ApiException catch (e) {
       if (mounted) showAppSnackBar(context, message: e.message);
     } on FormatException {
-      if (mounted) showAppSnackBar(context, message: 'Could not open the PDF.');
+      if (mounted) showAppSnackBar(context, message: 'Could not open the PDF');
     } finally {
       if (mounted) setState(() => _ctaLoading = false);
     }

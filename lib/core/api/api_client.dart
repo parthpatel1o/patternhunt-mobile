@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/env.dart';
+import '../text/app_copy.dart';
 
 typedef ReadRetryDelay = Future<void> Function(Duration duration);
 
@@ -98,9 +99,9 @@ class ApiClient {
     final message =
         _messageFromBody(response.data) ??
         (response.statusCode == 413
-            ? 'Those files are too large to upload at once. Try fewer or smaller photos/PDF.'
+            ? 'Those files are too large to upload at once Try fewer or smaller photos/PDF'
             : null) ??
-        (response.statusCode == 401 ? 'Please log in.' : null);
+        (response.statusCode == 401 ? 'Please log in' : null);
     throw ApiException(
       message ?? 'Request failed (${response.statusCode ?? 'unknown'})',
     );
@@ -111,13 +112,13 @@ class ApiClient {
     final message =
         _messageFromBody(e.response?.data) ??
         (status == 413
-            ? 'Those files are too large to upload at once. Try fewer or smaller photos/PDF.'
+            ? 'Those files are too large to upload at once Try fewer or smaller photos/PDF'
             : null) ??
-        (status == 401 ? 'Please log in.' : null) ??
+        (status == 401 ? 'Please log in' : null) ??
         (e.type == DioExceptionType.connectionTimeout ||
                 e.type == DioExceptionType.receiveTimeout ||
                 e.type == DioExceptionType.sendTimeout
-            ? 'Upload timed out. Try fewer or smaller photos.'
+            ? 'Upload timed out Try fewer or smaller photos'
             : null);
     throw ApiException(message ?? e.message ?? 'Request failed');
   }
@@ -128,7 +129,7 @@ class ApiClient {
     if (error is String && error.trim().isNotEmpty) {
       if (error.contains('FUNCTION_PAYLOAD_TOO_LARGE') ||
           error.contains('Payload Too Large')) {
-        return 'Those files are too large to upload at once. Try fewer or smaller photos/PDF.';
+        return 'Those files are too large to upload at once Try fewer or smaller photos/PDF';
       }
       return error;
     }
@@ -137,7 +138,7 @@ class ApiClient {
       if (nested is String && nested.trim().isNotEmpty) {
         if (nested.contains('FUNCTION_PAYLOAD_TOO_LARGE') ||
             nested.contains('Payload Too Large')) {
-          return 'Those files are too large to upload at once. Try fewer or smaller photos/PDF.';
+          return 'Those files are too large to upload at once Try fewer or smaller photos/PDF';
         }
         return nested;
       }
@@ -282,7 +283,8 @@ class ApiClient {
 }
 
 class ApiException implements Exception {
-  ApiException(this.message, {this.transient = false});
+  ApiException(String message, {this.transient = false})
+    : message = withoutSentenceFullStops(message);
   final String message;
   final bool transient;
   @override

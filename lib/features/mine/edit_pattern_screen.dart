@@ -145,7 +145,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Could not load this pattern.';
+        _error = 'Could not load this pattern';
       });
     }
   }
@@ -258,7 +258,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
       if (mounted) {
         showAppSnackBar(
           context,
-          message: 'Could not crop that photo. Try re-adding it.',
+          message: 'Could not crop that photo Try re-adding it',
         );
       }
     }
@@ -439,7 +439,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
     );
     if (response.statusCode == null || response.statusCode! >= 300) {
       throw ApiException(
-        'Upload failed (${response.statusCode ?? 'unknown'}).',
+        'Upload failed (${response.statusCode ?? 'unknown'})',
       );
     }
   }
@@ -447,7 +447,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
   Future<void> _save() async {
     final url = _url.text.trim();
     if (_photos.isEmpty) {
-      setState(() => _error = 'Add at least one photo.');
+      setState(() => _error = 'Add at least one photo');
       return;
     }
     if (!_isFree && url.isEmpty) {
@@ -470,7 +470,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
       if (!mounted) return;
       setState(() {
         _coverNotSquare = true;
-        _error = 'Your cover image needs to be a square image.';
+        _error = 'Your cover image needs to be a square image';
       });
       return;
     }
@@ -492,7 +492,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
             .map((e) => e as Map<String, dynamic>)
             .toList();
         if (slots.length != newPhotos.length) {
-          throw ApiException('Could not prepare image uploads.');
+          throw ApiException('Could not prepare image uploads');
         }
         await Future.wait([
           for (var i = 0; i < slots.length; i++)
@@ -530,7 +530,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
-      if (mounted) setState(() => _error = 'Could not save changes.');
+      if (mounted) setState(() => _error = 'Could not save changes');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -641,7 +641,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
                 if (!_isFree && _hasPdf) ...[
                   const SizedBox(height: 10),
                   Text(
-                    'Saving as paid will remove the uploaded PDF.',
+                    'Saving as paid will remove the uploaded PDF',
                     style: textTheme.bodySmall?.copyWith(
                       color: AppColors.muted,
                     ),
@@ -684,7 +684,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
           const SizedBox(height: 16),
           _EditSection(
             title: 'Photos',
-            hint: 'Choose one or more photos.',
+            hint: 'Choose one or more photos',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -700,7 +700,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
                 if (_coverNotSquare) ...[
                   const SizedBox(height: 10),
                   Text(
-                    'Your cover image needs to be a square image.',
+                    'Your cover image needs to be a square image',
                     style: textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.error,
                     ),
@@ -796,7 +796,7 @@ class _EditSection extends StatelessWidget {
           Text(
             title,
             style: Theme.of(context).textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w700, fontSize: 20),
+                ?.copyWith(fontWeight: FontWeight.w800, fontSize: 20),
           ),
           if (hint != null) ...[
             const SizedBox(height: 4),

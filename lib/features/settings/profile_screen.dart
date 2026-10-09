@@ -177,7 +177,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Delete account?'),
         content: const Text(
-          'This permanently deletes your Pattern Hunt account, saved boards, votes, and any patterns you submitted. This cannot be undone.',
+          'This permanently deletes your Pattern Hunt account, saved boards, votes, and any patterns you submitted This cannot be undone',
         ),
         actions: [
           TextButton(

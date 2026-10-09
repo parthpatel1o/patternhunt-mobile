@@ -62,7 +62,7 @@ class AppEmptyState extends StatelessWidget {
             Text(
               title,
               style: textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w800,
                 fontSize: 24,
                 color: AppColors.foreground,
               ),

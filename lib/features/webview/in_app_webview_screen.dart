@@ -159,7 +159,7 @@ class _InAppWebViewScreenState extends State<InAppWebViewScreen> {
 
   void _showBrowserError() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Could not open this page in the browser.')),
+      const SnackBar(content: Text('Could not open this page in the browser')),
     );
   }
 

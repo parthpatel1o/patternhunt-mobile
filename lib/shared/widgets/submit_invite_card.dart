@@ -69,7 +69,7 @@ class SubmitInviteCard extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 4),
                                 const Text(
-                                  'Submit it and it can climb this rank board.',
+                                  'Submit it and it can climb this rank board',
                                   maxLines: 3,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(

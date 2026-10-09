@@ -36,7 +36,7 @@ class SavedScreen extends ConsumerWidget {
                       child: AppEmptyState(
                         emoji: '📁',
                         title: 'No folders yet',
-                        description: 'Bookmark patterns from the rank board, or create folders here to organize them.',
+                        description: 'Bookmark patterns from the rank board, or create folders here to organize them',
                         action: EmptyStatePillButton(
                           label: 'Browse the rank board',
                           filled: false,
@@ -161,7 +161,7 @@ class _SavedFolderCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w700, fontSize: 20),
+                        ?.copyWith(fontWeight: FontWeight.w800, fontSize: 20),
                   ),
                   Text(
                     countLabel,

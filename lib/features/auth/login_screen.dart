@@ -9,6 +9,7 @@ import '../../core/auth/login_redirect.dart';
 import '../../core/auth/signup_welcome.dart';
 import '../../core/config/env.dart';
 import '../../core/providers/providers.dart';
+import '../../core/text/app_copy.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/google_logo.dart';
 
@@ -88,7 +89,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         if (_designer && _name.text.trim().length < 2) {
           setState(() {
             _loading = false;
-            _error = 'Enter your designer name (at least 2 characters).';
+            _error = 'Enter your designer name (at least 2 characters)';
           });
           return;
         }
@@ -120,14 +121,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         if (response.session == null) {
           setState(
             () => _error =
-                'Could not start a session. Check your email is confirmed.',
+                'Could not start a session Check your email is confirmed',
           );
           return;
         }
       }
       if (mounted) context.go(_resolveNextPath());
     } on AuthException catch (e) {
-      setState(() => _error = e.message);
+      setState(() => _error = withoutSentenceFullStops(e.message));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -152,12 +153,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _error = null;
     });
     try {
-      await Supabase.instance.client.auth.signInWithOAuth(
+      final launched = await Supabase.instance.client.auth.signInWithOAuth(
         OAuthProvider.google,
         redirectTo: Env.authRedirectUrl,
+        // An embedded Safari view stays open after the auth callback on iOS.
+        // The system browser returns to the app through Supabase's deep link.
+        authScreenLaunchMode: kIsWeb
+            ? LaunchMode.platformDefault
+            : LaunchMode.externalApplication,
       );
+      if (!launched && mounted) {
+        setState(
+          () => _error = 'Could not open Google sign-in Please try again',
+        );
+      }
     } on AuthException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) setState(() => _error = withoutSentenceFullStops(e.message));
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = 'Could not open Google sign-in Please try again',
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -174,14 +191,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
       final identityToken = credential.identityToken;
       if (identityToken == null) {
-        throw const AuthException('Apple did not return an identity token.');
+        throw const AuthException('Apple did not return an identity token');
       }
       await Supabase.instance.client.auth.signInWithIdToken(
         provider: OAuthProvider.apple,
         idToken: identityToken,
       );
     } on AuthException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) setState(() => _error = withoutSentenceFullStops(e.message));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -195,7 +212,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     String buttonLabel = 'Back to log in',
   }) {
     final titleStyle = Theme.of(context).textTheme.titleLarge
-        ?.copyWith(fontWeight: FontWeight.w700, color: AppColors.foreground);
+        ?.copyWith(fontWeight: FontWeight.w800, color: AppColors.foreground);
 
     return SafeArea(
       child: ListView(
@@ -253,13 +270,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           Text(
             'Check your email',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
               color: AppColors.foreground,
             ),
           ),
           const SizedBox(height: 12),
           Text(
-            'We sent a confirmation link to $_signupSuccessEmail. Tap it to confirm and log in.',
+            'We sent a confirmation link to $_signupSuccessEmail Tap it to confirm and log in',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 32),
@@ -276,8 +293,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return _buildEmailSuccess(
       title: 'Check your email',
       body:
-          'If an account exists for $_forgotSuccessEmail, we sent a password reset link.',
-      hint: 'Open the link in that email to choose a new password.',
+          'If an account exists for $_forgotSuccessEmail, we sent a password reset link',
+      hint: 'Open the link in that email to choose a new password',
       onBack: _resetForgotSuccess,
     );
   }
@@ -305,10 +322,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     };
 
     final subtitle = switch (_mode) {
-      _AuthMode.login => 'Login to vote and save patterns.',
+      _AuthMode.login => 'Login to vote and save patterns',
       _AuthMode.signup =>
-        'Join Pattern Hunt to vote, save favourites, and submit patterns.',
-      _AuthMode.forgot => 'Enter your email and we’ll send a reset link.',
+        'Join Pattern Hunt to vote, save favourites, and submit patterns',
+      _AuthMode.forgot => 'Enter your email and we’ll send a reset link',
     };
 
     return SafeArea(
@@ -319,7 +336,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             title,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w700),
+                ?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 8),
           Text(

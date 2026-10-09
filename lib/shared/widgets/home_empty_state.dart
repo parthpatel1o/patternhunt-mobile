@@ -33,21 +33,21 @@ class HomeEmptyState extends StatelessWidget {
     if (isSearch) {
       title = 'No patterns found';
       description =
-          'Nothing matched “$q”. Try a designer name, a shorter word, or check the spelling.';
+          'Nothing matched “$q” Try a designer name, a shorter word, or check the spelling';
     } else if (freeOnly) {
       title = categoryName != null
           ? 'No free $categoryName patterns yet'
           : 'No free patterns yet';
       description = categoryName != null
-          ? 'Nothing free is on the board in $categoryName. Turn off Free only, or browse everything.'
-          : 'Nothing free is on the board right now. Turn off Free only to see paid patterns too.';
+          ? 'Nothing free is on the board in $categoryName Turn off Free only, or browse everything'
+          : 'Nothing free is on the board right now Turn off Free only to see paid patterns too';
     } else if (categoryName != null) {
       title = 'No $categoryName patterns yet';
       description =
-          'The rank board is empty in $categoryName. Browse everything, or be the first to add one.';
+          'The rank board is empty in $categoryName Browse everything, or be the first to add one';
     } else {
       title = 'The rank board is waiting';
-      description = 'No patterns have been published yet. Submit one and it’ll show up here for the community to upvote.';
+      description = 'No patterns have been published yet Submit one and it’ll show up here for the community to upvote';
     }
 
     return AppEmptyState(
