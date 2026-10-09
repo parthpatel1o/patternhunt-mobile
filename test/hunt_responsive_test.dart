@@ -9,6 +9,8 @@ import 'package:patternhunt_mobile/features/hunt/hunt_demo_pattern.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _HuntApi extends ApiClient {
+  _HuntApi({this.empty = false});
+  final bool empty;
   @override
   Future<T> getData<T>(
     String path, {
@@ -17,19 +19,21 @@ class _HuntApi extends ApiClient {
     required T Function(dynamic json) map,
   }) async => map({
     'patterns': [
-      for (var i = 0; i < 2; i++)
-        {
-          'id': 'pattern-$i',
-          'title': 'A long crochet pattern name for testing tablet layouts $i',
-          'slug': 'pattern-$i',
-          'designerName': 'Crochet designer',
-          'imageUrls': <String>[],
-          'patternUrl': 'https://example.com/pattern',
-          'isFree': false,
-          'hasPdf': false,
-          'voteCount': 5,
-          'createdAt': '2026-10-08',
-        },
+      if (!empty)
+        for (var i = 0; i < 2; i++)
+          {
+            'id': 'pattern-$i',
+            'title':
+                'A long crochet pattern name for testing tablet layouts $i',
+            'slug': 'pattern-$i',
+            'designerName': 'Crochet designer',
+            'imageUrls': <String>[],
+            'patternUrl': 'https://example.com/pattern',
+            'isFree': false,
+            'hasPdf': false,
+            'voteCount': 5,
+            'createdAt': '2026-10-08',
+          },
     ],
     'hasMore': false,
   });
@@ -52,7 +56,13 @@ Future<void> _swipe(WidgetTester tester, double direction) async {
   await tester.pump(const Duration(milliseconds: 500));
 }
 
-Future<void> _mount(WidgetTester tester, Size size, bool tutorial) async {
+Future<void> _mount(
+  WidgetTester tester,
+  Size size,
+  bool tutorial, {
+  double textScale = 1,
+  bool empty = false,
+}) async {
   SharedPreferences.setMockInitialValues({'hunt.tutorialSeen': !tutorial});
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
@@ -63,10 +73,15 @@ Future<void> _mount(WidgetTester tester, Size size, bool tutorial) async {
     ProviderScope(
       overrides: [
         sessionProvider.overrideWithValue(null),
-        apiClientProvider.overrideWithValue(_HuntApi()),
+        apiClientProvider.overrideWithValue(_HuntApi(empty: empty)),
       ],
-      child: const MaterialApp(
-        home: Scaffold(
+      child: MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+        home: const Scaffold(
           body: HuntScreen(),
           bottomNavigationBar: SizedBox(height: 80),
         ),
@@ -171,6 +186,49 @@ void main() {
     expect(find.text('1 of 5'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  for (final scenario in [
+    (const Size(390, 844), 1.0),
+    (const Size(375, 667), 1.0),
+    (const Size(320, 568), 1.0),
+    (const Size(390, 844), 1.4),
+  ]) {
+    testWidgets(
+      'complete tutorial fits phone ${scenario.$1} at text scale ${scenario.$2}',
+      (tester) async {
+        await _mount(tester, scenario.$1, true, textScale: scenario.$2, empty: true);
+        expect(tester.takeException(), isNull);
+        await _swipe(tester, -1);
+        expect(find.text('2 of 5'), findsOneWidget);
+        await _swipe(tester, 1);
+        expect(find.text('3 of 5'), findsOneWidget);
+        var photo = tester.getRect(
+          find.byKey(const ValueKey('hunt-photo-$huntDemoPatternId')),
+        );
+        await tester.tapAt(Offset(photo.right - 20, photo.center.dy));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(find.text('4 of 5'), findsOneWidget);
+        await tester.tapAt(Offset(photo.left + 20, photo.center.dy));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(find.text('5 of 5'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        final gesture = await tester.startGesture(tester.getCenter(_pan));
+        await gesture.moveBy(const Offset(0, -30));
+        await tester.pump(const Duration(milliseconds: 30));
+        await gesture.moveBy(const Offset(0, -190));
+        await tester.pump();
+        await gesture.up();
+        for (var i = 0; i < 12; i++) {
+          await tester.pump(const Duration(milliseconds: 500));
+          expect(tester.takeException(), isNull);
+        }
+        expect(find.text('1 of 5'), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
 
   testWidgets('phone keeps its full-width square photo layout', (tester) async {
     await _mount(tester, const Size(390, 900), false);

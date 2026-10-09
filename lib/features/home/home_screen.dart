@@ -15,6 +15,7 @@ import '../../shared/widgets/category_dropdown.dart';
 import '../../shared/widgets/home_empty_state.dart';
 import '../../shared/widgets/pattern_card_widget.dart';
 import '../../shared/widgets/rank_board_filter.dart';
+import '../../shared/widgets/rank_board_viewport.dart';
 import '../../shared/widgets/submit_invite_card.dart';
 import '../../shared/widgets/skeleton_loader.dart';
 
@@ -591,98 +592,101 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         }
       },
       color: AppColors.accent,
-      child: ListView(
-        controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        children: [
-          if (!_isSearching) ...[
-            CategoryDropdown(
-              value: category ?? 'all',
-              entries: [
-                (value: 'all', label: 'All categories'),
-                for (final c in constants.categories)
-                  (value: c.slug, label: c.name),
-              ],
-              onChanged: _onCategoryChanged,
-            ),
-            const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (final p in constants.rankPeriods) ...[
-                  if (p != constants.rankPeriods.first)
-                    const SizedBox(width: 24),
-                  _PeriodLink(
-                    label: p.label,
-                    selected: period == p.value,
-                    onTap: () => _onPeriodChanged(p.value),
-                  ),
+      child: RankBoardViewport(
+        child: ListView(
+          controller: _scrollController,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          children: [
+            if (!_isSearching) ...[
+              CategoryDropdown(
+                value: category ?? 'all',
+                entries: [
+                  (value: 'all', label: 'All categories'),
+                  for (final c in constants.categories)
+                    (value: c.slug, label: c.name),
                 ],
-              ],
-            ),
-            const SizedBox(height: 4),
-          ] else ...[
-            Align(
-              alignment: Alignment.centerLeft,
-              child: InkWell(
-                onTap: _backToRankBoard,
-                borderRadius: BorderRadius.circular(6),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.chevron_left,
-                        size: 20,
-                        color: AppColors.accent,
-                      ),
-                      Text(
-                        'Back to rank board',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                onChanged: _onCategoryChanged,
+              ),
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (final p in constants.rankPeriods) ...[
+                    if (p != constants.rankPeriods.first)
+                      const SizedBox(width: 24),
+                    _PeriodLink(
+                      label: p.label,
+                      selected: period == p.value,
+                      onTap: () => _onPeriodChanged(p.value),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 4),
+            ] else ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: InkWell(
+                  onTap: _backToRankBoard,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.chevron_left,
+                          size: 20,
                           color: AppColors.accent,
-                          fontWeight: FontWeight.w600,
                         ),
-                      ),
-                    ],
+                        Text(
+                          'Back to rank board',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: AppColors.accent,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Results for “$searchQuery”',
-              style: Theme.of(context).textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 12),
-          ],
-          if (!_isSearching)
-            // Sit just above the first card — matches web RankBoardFilter.
-            Align(
-              alignment: Alignment.centerRight,
-              child: RankBoardFilter(
-                freeOnly: freeOnly,
-                onFreeOnlyChanged: _onFreeOnlyChanged,
+              const SizedBox(height: 10),
+              Text(
+                'Results for “$searchQuery”',
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w800),
               ),
-            ),
-          if (_singlePatternMode)
-            _buildSinglePatternResults(constants)
-          else if (_rankFocusMode)
-            _buildFocusedBoard()
-          else if (!_categoryInitialized)
-            const Column(
-              children: [
-                PatternCardSkeleton(),
-                SizedBox(height: 12),
-                PatternCardSkeleton(),
-                SizedBox(height: 12),
-                PatternCardSkeleton(),
-              ],
-            )
-          else
-            _buildSearchOrRankResults(query, constants),
-        ],
+              const SizedBox(height: 12),
+            ],
+            if (!_isSearching)
+              // Sit just above the first card — matches web RankBoardFilter.
+              Align(
+                alignment: Alignment.centerRight,
+                child: RankBoardFilter(
+                  freeOnly: freeOnly,
+                  onFreeOnlyChanged: _onFreeOnlyChanged,
+                ),
+              ),
+            if (_singlePatternMode)
+              _buildSinglePatternResults(constants)
+            else if (_rankFocusMode)
+              _buildFocusedBoard()
+            else if (!_categoryInitialized)
+              const Column(
+                children: [
+                  PatternCardSkeleton(),
+                  SizedBox(height: 12),
+                  PatternCardSkeleton(),
+                  SizedBox(height: 12),
+                  PatternCardSkeleton(),
+                ],
+              )
+            else
+              _buildSearchOrRankResults(query, constants),
+          ],
+        ),
       ),
     );
   }
@@ -854,7 +858,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   }
                 : null,
           ),
-          const SizedBox(height: 12),
+          SizedBox(
+            height: MediaQuery.sizeOf(context).shortestSide >= 600 ? 28 : 12,
+          ),
         ],
         if (page.loadingMore)
           const Padding(

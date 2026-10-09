@@ -120,9 +120,59 @@ class PatternCardSkeleton extends StatelessWidget {
     ),
   ];
 
+  Widget _tabletCard(BuildContext context) {
+    final wide = MediaQuery.sizeOf(context).width >= 1024;
+    return Container(
+      key: const ValueKey('tablet-pattern-skeleton'),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.border),
+        boxShadow: _shadows,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        children: [
+          Padding(
+            padding: EdgeInsets.all(wide ? 14 : 0),
+            child: SizedBox.square(
+              dimension: wide ? 192 : 176,
+              child: SkeletonBox(borderRadius: wide ? 16 : 0),
+            ),
+          ),
+          const Expanded(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SkeletonBox(height: 24),
+                  SizedBox(height: 8),
+                  SkeletonBox(width: 140, height: 16),
+                  SizedBox(height: 12),
+                  SkeletonBox(width: 60, height: 24),
+                  SizedBox(height: 16),
+                  Row(
+                    children: [
+                      SkeletonBox(width: 72, height: 44, borderRadius: 999),
+                      SizedBox(width: 8),
+                      SkeletonBox(width: 128, height: 44, borderRadius: 999),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Matches PatternCardWidget layout: top inset for rank badge, half/half row.
+    // Phone geometry stays unchanged; tablets use the web board proportions.
+    final tabletDevice = MediaQuery.sizeOf(context).shortestSide >= 600;
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Stack(
@@ -130,6 +180,9 @@ class PatternCardSkeleton extends StatelessWidget {
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
+              if (tabletDevice && constraints.maxWidth >= 568) {
+                return _tabletCard(context);
+              }
               // Outer height from outer width; Row halves use Expanded so they
               // respect BoxDecoration.border inset (same as PatternCardWidget).
               final height = constraints.maxWidth / 2;
@@ -233,10 +286,14 @@ class PatternCardSkeleton extends StatelessWidget {
             },
           ),
           // Rank badge ghost — overlaps top-left like web loading.tsx / PatternCardWidget
-          const Positioned(
-            left: -6,
-            top: -14,
-            child: SkeletonBox(width: 40, height: 36, borderRadius: 999),
+          Positioned(
+            left: tabletDevice ? -16 : -6,
+            top: tabletDevice ? -20 : -14,
+            child: SkeletonBox(
+              width: tabletDevice ? 56 : 40,
+              height: tabletDevice ? 56 : 36,
+              borderRadius: 999,
+            ),
           ),
         ],
       ),

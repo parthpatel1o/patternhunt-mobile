@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as raster;
 import 'package:patternhunt_mobile/shared/branding/brand_mark_paths.dart';
 
 /// Exports the actual vector curves through Flutter's native graphics engine.
@@ -104,9 +105,13 @@ Future<void> _write(
   final picture = recorder.endRecording();
   final image = await picture.toImage(size, size);
   final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-  await File(path).writeAsBytes(
-    bytes!.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
-  );
+  final png = bytes!.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes);
+  // Launcher artwork is fully opaque. Encode RGB explicitly rather than RGBA
+  // so App Store validation and platform processing see no transparency layer.
+  final output = launcher
+      ? raster.encodePng(raster.decodePng(png)!.convert(numChannels: 3))
+      : png;
+  await File(path).writeAsBytes(output);
   image.dispose();
   picture.dispose();
 }

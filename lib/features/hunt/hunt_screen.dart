@@ -25,6 +25,7 @@ import '../../shared/widgets/in_app_webview.dart';
 import '../../shared/widgets/save_board_sheet.dart';
 import 'hunt_demo_pattern.dart';
 import 'hunt_deck_layout.dart';
+import 'hunt_empty_card.dart';
 import 'hunt_show_filter.dart';
 import 'hunt_storage.dart';
 import 'hunt_view_queue.dart';
@@ -995,11 +996,8 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
 
   Widget _buildEnd() {
     if (_patterns.isEmpty) {
-      return _MessageState(
-        title: 'Nothing to hunt here',
-        message: 'Try another category or rank board, or check back once more patterns are published',
-        primaryLabel: 'Change filters',
-        onPrimary: _showFilters,
+      return HuntDeckLayout(
+        cards: [HuntEmptyCard(onChangeFilters: _showFilters)],
       );
     }
     final count = _patterns.length;
@@ -2055,6 +2053,10 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         }
       },
     );
+    return LayoutBuilder(builder: _buildCard);
+  }
+
+  Widget _buildCard(BuildContext context, BoxConstraints constraints) {
     final pattern = widget.pattern;
     final images = pattern.imageUrls;
     final download = !_isDemo && pattern.isFree && pattern.hasPdf;
@@ -2065,6 +2067,14 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
 
     final tabletLayout =
         MediaQuery.sizeOf(context).width >= huntWideLayoutBreakpoint;
+    // Only the tutorial demo can shrink its photo on short phone surfaces.
+    // Real Hunt cards retain their existing square photo and metadata placement.
+    final fitPhotoToHeight =
+        tabletLayout ||
+        (_isDemo &&
+            constraints.maxHeight <
+                constraints.maxWidth +
+                    262 * MediaQuery.textScalerOf(context).scale(14) / 14);
     final photo = AspectRatio(
       aspectRatio: 1,
       child: _HuntGallery(
@@ -2106,7 +2116,10 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
             else
               const SizedBox(height: 6),
             const SizedBox(height: 12),
-            if (tabletLayout) Expanded(child: Center(child: photo)) else photo,
+            if (fitPhotoToHeight)
+              Expanded(child: Center(child: photo))
+            else
+              photo,
           ],
         ),
       ),
@@ -2125,7 +2138,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (tabletLayout) Expanded(child: photoSection) else photoSection,
+          if (fitPhotoToHeight) Expanded(child: photoSection) else photoSection,
           Container(
             decoration: const BoxDecoration(
               border: Border(top: BorderSide(color: AppColors.border)),
@@ -2401,7 +2414,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
               ],
             ),
           ),
-          if (!tabletLayout)
+          if (!fitPhotoToHeight)
             Expanded(child: _maybePan(child: const SizedBox.expand())),
         ],
       ),
@@ -2896,59 +2909,62 @@ class _HuntTutSlideUpCoachState extends State<_HuntTutSlideUpCoach>
           final cueY = 6 - 16 * t;
           final cueOpacity = 0.55 + 0.45 * t;
 
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Opacity(
-                opacity: heartOpacity,
-                child: Transform.translate(
-                  offset: Offset(0, heartY),
-                  child: Transform.scale(
-                    scale: heartScale,
-                    child: const ArrowBigUpIcon(
-                      size: 56,
-                      color: AppColors.accent,
-                      filled: true,
-                      strokeWidth: 2.25,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Opacity(
-                opacity: cueOpacity,
-                child: Transform.translate(
-                  offset: Offset(0, cueY),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.70),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: AppColors.accent, width: 2),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          blurRadius: 14,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: const Text(
-                      'SWIPE UP',
-                      style: TextStyle(
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Opacity(
+                  opacity: heartOpacity,
+                  child: Transform.translate(
+                    offset: Offset(0, heartY),
+                    child: Transform.scale(
+                      scale: heartScale,
+                      child: const ArrowBigUpIcon(
+                        size: 56,
                         color: AppColors.accent,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.6,
+                        filled: true,
+                        strokeWidth: 2.25,
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                Opacity(
+                  opacity: cueOpacity,
+                  child: Transform.translate(
+                    offset: Offset(0, cueY),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.70),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: AppColors.accent, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 14,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Text(
+                        'SWIPE UP',
+                        style: TextStyle(
+                          color: AppColors.accent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           );
         },
       ),
@@ -3024,23 +3040,36 @@ class _TutorialCoach extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                for (var i = 0; i < 5; i++) ...[
-                  if (i > 0) const SizedBox(width: 4),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    width: 16,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: i == step
-                          ? Colors.white
-                          : Colors.white.withValues(
-                              alpha: i < step ? 0.55 : 0.25,
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 96),
+                      child: Row(
+                        children: [
+                          for (var i = 0; i < 5; i++) ...[
+                            if (i > 0) const SizedBox(width: 4),
+                            Expanded(
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: i == step
+                                      ? Colors.white
+                                      : Colors.white.withValues(
+                                          alpha: i < step ? 0.55 : 0.25,
+                                        ),
+                                  borderRadius: BorderRadius.circular(99),
+                                ),
+                              ),
                             ),
-                      borderRadius: BorderRadius.circular(99),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
-                ],
-                const Spacer(),
+                ),
+                const SizedBox(width: 10),
                 TextButton(
                   onPressed: () => unawaited(onSkip()),
                   style: TextButton.styleFrom(

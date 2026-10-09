@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -454,10 +455,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
             data: {'reason': reason},
           );
       if (mounted) {
-        showAppSnackBar(
-          context,
-          message: 'Thanks — your report has been sent',
-        );
+        showAppSnackBar(context, message: 'Thanks — your report has been sent');
       }
     } on ApiException catch (e) {
       if (mounted) showAppSnackBar(context, message: e.message);
@@ -579,6 +577,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
     final showView = pattern.patternUrl != null;
     final images = pattern.imageUrls;
     final radius = BorderRadius.circular(16);
+    final tabletDevice = MediaQuery.sizeOf(context).shortestSide >= 600;
 
     final card = Padding(
       padding: EdgeInsets.only(top: widget.showRank ? 8 : 0),
@@ -588,6 +587,11 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
           _withHighlight(
             LayoutBuilder(
               builder: (context, constraints) {
+                // Preserve the phone layout, including phones in landscape.
+                // Tablet rows follow the web board's bounded gallery sizing.
+                if (tabletDevice && constraints.maxWidth >= 568) {
+                  return _buildTabletCard(context);
+                }
                 final height = constraints.maxWidth / 2;
                 return SizedBox(
                   height: height,
@@ -895,13 +899,13 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
           ),
           if (widget.showRank)
             Positioned(
-              left: -6,
-              top: -14,
+              left: tabletDevice ? -16 : -6,
+              top: tabletDevice ? -20 : -14,
               child: IgnorePointer(
                 child: Container(
-                  constraints: const BoxConstraints(
-                    minWidth: 40,
-                    minHeight: 36,
+                  constraints: BoxConstraints(
+                    minWidth: tabletDevice ? 56 : 40,
+                    minHeight: tabletDevice ? 56 : 36,
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   decoration: BoxDecoration(
@@ -923,7 +927,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
                     '#${widget.rank}',
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
-                      fontSize: 13,
+                      fontSize: tabletDevice ? 24 : 13,
                       color: badgeFg,
                     ),
                   ),
@@ -945,7 +949,227 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
         );
   }
 
-  Widget _buildGallery(List<String> images, Color bg) {
+  Widget _buildTabletCard(BuildContext context) {
+    final pattern = widget.pattern;
+    final (bg, border, borderWidth, shadows) = _rankStyle();
+    final (pillBg, pillFg) = _pricePillColors();
+    final (voteBg, voteFg, voteBorder) = _voteColors();
+    final wide = MediaQuery.sizeOf(context).width >= 1024;
+    final imageSize = wide ? 192.0 : 176.0;
+    final date = DateTime.tryParse(pattern.createdAt);
+    final showDownload =
+        pattern.isFree && pattern.hasPdf && pattern.patternUrl == null;
+    final showView = pattern.patternUrl != null;
+    final actions = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        SizedBox(
+          height: 44,
+          child:
+              OutlinedButton(
+                    onPressed: _toggleVote,
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: voteBg,
+                      foregroundColor: voteFg,
+                      disabledBackgroundColor: voteBg,
+                      disabledForegroundColor: voteFg,
+                      side: BorderSide(color: voteBorder),
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      textStyle: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ArrowBigUpIcon(size: 22, color: voteFg, filled: _voted),
+                        const SizedBox(width: 4),
+                        Text('$_voteCount'),
+                      ],
+                    ),
+                  )
+                  .animate(target: _voted ? 1 : 0)
+                  .scale(
+                    begin: const Offset(1, 1),
+                    end: const Offset(1.06, 1.06),
+                    duration: 280.ms,
+                  ),
+        ),
+        if (showDownload || showView) ...[
+          SizedBox(
+            height: 44,
+            child: FilledButton(
+              onPressed: _ctaLoading
+                  ? null
+                  : showDownload
+                  ? _downloadPdf
+                  : _viewPattern,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: AppColors.accentForeground,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                shape: const StadiumBorder(),
+                textStyle: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              child: Text(
+                _ctaLoading
+                    ? 'Loading…'
+                    : showDownload
+                    ? 'Download'
+                    : 'View Pattern',
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+    final details = Column(
+      key: const ValueKey('tablet-pattern-details'),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          pattern.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: AppColors.foreground,
+            fontSize: wide ? 30 : 24,
+            height: 1.2,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 2),
+        GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => context.push(creatorPath(pattern.designerName)),
+          child: _ExpandHitTest(
+            vertical: 12,
+            child: Text(
+              pattern.designerName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.foreground,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: pillBg,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                pattern.isFree ? 'Free' : 'Paid',
+                style: TextStyle(
+                  color: pillFg,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (date != null)
+              Text(
+                'Launched ${DateFormat('d MMM yyyy').format(date)}',
+                style: const TextStyle(color: AppColors.muted, fontSize: 14),
+              ),
+          ],
+        ),
+      ],
+    );
+    return GestureDetector(
+      onTap: _openGallery,
+      onLongPress: _openReportSheet,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        key: const ValueKey('tablet-pattern-card'),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: border, width: borderWidth),
+          boxShadow: shadows,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(22 - borderWidth),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Padding(
+                padding: EdgeInsets.all(wide ? 14 : 0),
+                child: SizedBox.square(
+                  key: const ValueKey('tablet-pattern-gallery'),
+                  dimension: imageSize,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(wide ? 16 : 0),
+                    child: _buildGallery(
+                      pattern.imageUrls,
+                      bg,
+                      imageFit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Wrap the controls below the text only when a narrow tablet
+                      // window or larger accessibility text needs more room.
+                      final textScale =
+                          MediaQuery.textScalerOf(context).scale(14) / 14;
+                      if (constraints.maxWidth < 440 * textScale) {
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            details,
+                            const SizedBox(height: 16),
+                            actions,
+                          ],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          Expanded(child: details),
+                          const SizedBox(width: 20),
+                          actions,
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGallery(
+    List<String> images,
+    Color bg, {
+    BoxFit imageFit = BoxFit.cover,
+  }) {
     return ColoredBox(
       color: bg,
       child: Stack(
@@ -966,7 +1190,7 @@ class _PatternCardWidgetState extends ConsumerState<PatternCardWidget>
               itemBuilder: (context, index) {
                 return CachedNetworkImage(
                   imageUrl: images[index],
-                  fit: BoxFit.cover,
+                  fit: imageFit,
                   alignment: Alignment.center,
                 );
               },
