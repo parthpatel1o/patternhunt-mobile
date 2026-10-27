@@ -76,8 +76,13 @@ class _HuntApi extends ApiClient {
     }
     if (path.endsWith('/vote')) {
       final id = path.split('/')[2];
-      voted.add(id);
-      return {'voted': true, 'voteCount': 1};
+      final didVote = data['voted'] as bool;
+      if (didVote) {
+        voted.add(id);
+      } else {
+        voted.remove(id);
+      }
+      return {'voted': didVote, 'voteCount': didVote ? 1 : 0};
     }
     if (path == '/me/pattern-state') {
       return {
@@ -285,6 +290,9 @@ void main() {
     // The next card is kept mounted as a disabled peek, so tap the active
     // (last) vote button on the front card.
     await tester.tap(find.widgetWithText(FilledButton, '0').last);
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(find.text('Upvoted!'), findsOneWidget);
+    expect(frontCard('pattern-1'), findsOneWidget);
     for (var i = 0; i < 12; i++) {
       await tester.pump(const Duration(milliseconds: 250));
     }
@@ -292,6 +300,40 @@ void main() {
 
     expect(api.voted, contains('pattern-1'));
     expect(frontCard('pattern-2'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('tapping an active vote unvotes without advancing the card', (
+    tester,
+  ) async {
+    addTearDown(tester.view.reset);
+    final api = _HuntApi();
+    await _mount(tester, api);
+
+    Finder frontCard(String id) => find.ancestor(
+      of: find
+          .byWidgetPredicate(
+            (widget) => widget is GestureDetector && widget.onPanStart != null,
+          )
+          .first,
+      matching: find.byKey(ValueKey(id)),
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, '0').last);
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+    await tester.pumpAndSettle();
+    expect(frontCard('pattern-2'), findsOneWidget);
+
+    await _swipe(tester, const Offset(220, 0));
+    expect(frontCard('pattern-1'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, '1').last);
+    await tester.pumpAndSettle();
+
+    expect(api.voted, isNot(contains('pattern-1')));
+    expect(frontCard('pattern-1'), findsOneWidget);
+    expect(find.text('Upvoted!'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

@@ -59,7 +59,7 @@ const double _kUpvoteVelocityMinY = -80;
 const int _kFlyMs = 360;
 
 /// First leg: ease up to ~halfway before “Upvoted!”.
-const int _kFlyToMidMs = 520;
+const int _kFlyToMidMs = 620;
 
 /// Pause with vote button celebrating on the outgoing card.
 const int _kUpvoteStampMs = 720;
@@ -68,7 +68,7 @@ const int _kUpvoteStampMs = 720;
 const int _kTutorialUpvoteStampMs = 1600;
 
 /// Second leg: ease the rest of the way off-screen.
-const int _kFlyUpMs = 460;
+const int _kFlyUpMs = 560;
 const int _kSnapMs = 300;
 
 /// Vote-button celebrate window (stamp + exit).
@@ -77,6 +77,9 @@ const int _kTutorialUpvotePopMs = 2000;
 
 /// How long to leave “Enjoy hunting patterns!” on screen.
 const int _kTutorialEnjoyMs = 2000;
+
+/// A tap acknowledges the upvote before the card begins its exit.
+const int _kVoteButtonFeedbackMs = 180;
 
 const double _kActionBtnHeight = 48;
 
@@ -134,6 +137,8 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
   /// Underlay side under the front card — web `underlaySide`: prev vs next.
   /// Default / idle is next (`false`).
   bool _peekPrevious = false;
+  bool _hideNextPeek = false;
+  int _peekResetGeneration = 0;
 
   @override
   void initState() {
@@ -232,6 +237,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
       _setupFreeOnly = null;
       _phaseBeforeSetup = null;
       _peekPrevious = false;
+      _hideNextPeek = false;
     });
     unawaited(_boot());
   }
@@ -454,6 +460,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
       setState(() {
         _index = next;
         _peekPrevious = false;
+        _hideNextPeek = false;
       });
       _recordCurrentView();
       await _persistRun();
@@ -461,7 +468,10 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
     }
     if (delta > 0 && _hasMore) {
       final offset = _nextOffset ?? _patterns.length;
-      setState(() => _peekPrevious = false);
+      setState(() {
+        _peekPrevious = false;
+        _hideNextPeek = false;
+      });
       await _loadPage(offset: offset, targetAbsoluteIndex: _patterns.length);
       return;
     }
@@ -469,6 +479,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
       setState(() {
         _phase = _HuntPhase.end;
         _peekPrevious = false;
+        _hideNextPeek = false;
       });
     }
   }
@@ -485,6 +496,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
     setState(() {
       _demoIndex = next;
       _peekPrevious = false;
+      _hideNextPeek = false;
     });
     // After the upvote card leaves, reveal the enjoy sheet (not mid-flight).
     if (delta > 0 && _tutorialStep == 5) {
@@ -507,17 +519,43 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
 
   /// Match web: `dx >= 0` → previous underlay, else next; idle (`0`) defaults next.
   void _onFrontDragX(double dragX) {
-    final wantPrev = dragX > 0;
-    if (wantPrev != _peekPrevious) {
-      setState(() => _peekPrevious = wantPrev);
+    _peekResetGeneration++;
+    final hasPrevious = _adjacentIndex(-1) >= 0;
+    final wantPrev = dragX > 0 && hasPrevious;
+    final hideNext = dragX > 0 && !hasPrevious;
+    if (wantPrev != _peekPrevious || hideNext != _hideNextPeek) {
+      setState(() {
+        _peekPrevious = wantPrev;
+        _hideNextPeek = hideNext;
+      });
     }
   }
 
   /// Lock underlay for a committed fly-off before the exit animation.
   void _onFrontPeekSide({required bool toNext}) {
-    final wantPrev = !toNext;
-    if (wantPrev != _peekPrevious) {
-      setState(() => _peekPrevious = wantPrev);
+    final hasPrevious = _adjacentIndex(-1) >= 0;
+    final wantPrev = !toNext && hasPrevious;
+    final restoreNextAfterSnap = toNext && _hideNextPeek;
+    final hideNext = (!toNext && !hasPrevious) || restoreNextAfterSnap;
+    final resetGeneration = ++_peekResetGeneration;
+    if (wantPrev != _peekPrevious || hideNext != _hideNextPeek) {
+      setState(() {
+        _peekPrevious = wantPrev;
+        _hideNextPeek = hideNext;
+      });
+    }
+    if (restoreNextAfterSnap) {
+      unawaited(
+        Future<void>.delayed(const Duration(milliseconds: _kSnapMs), () {
+          if (!mounted ||
+              resetGeneration != _peekResetGeneration ||
+              !_hideNextPeek ||
+              _peekPrevious) {
+            return;
+          }
+          setState(() => _hideNextPeek = false);
+        }),
+      );
     }
   }
 
@@ -638,6 +676,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
       if (_tutorialStep == 4 && _demoIndex >= _demoPatterns.length - 1) {
         _demoIndex = math.max(0, _demoPatterns.length - 2);
         _peekPrevious = false;
+        _hideNextPeek = false;
       }
     });
     if (_tutorialStep == 5) {
@@ -927,6 +966,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
           ? _demoPatterns[_demoIndex + 1]
           : null;
       final showPrev = _peekPrevious;
+      final hideNext = _hideNextPeek;
 
       return HuntDeckLayout(
         coach: _TutorialCoach(step: _tutorialStep, onSkip: _finishTutorial),
@@ -936,7 +976,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
             Positioned.fill(
               child: IgnorePointer(
                 child: Opacity(
-                  opacity: showPrev ? 0 : 1,
+                  opacity: showPrev || hideNext ? 0 : 1,
                   child: _HuntPatternCard(
                     key: ValueKey(nextPattern.id),
                     pattern: nextPattern,
@@ -971,6 +1011,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
               period: _period,
               tutorialMode: true,
               tutorialStep: _tutorialStep,
+              canGoPrevious: prevPattern != null,
               onPreviousPattern: () => _moveDemoPattern(-1),
               onNextPattern: () => _moveDemoPattern(1),
               onGesture: _onTutorialGesture,
@@ -1011,6 +1052,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
         ? _patterns[nextIndex]
         : null;
     final showPrev = _peekPrevious;
+    final hideNext = _hideNextPeek;
 
     return HuntDeckLayout(
       cards: [
@@ -1020,7 +1062,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
           Positioned.fill(
             child: IgnorePointer(
               child: Opacity(
-                opacity: showPrev ? 0 : 1,
+                opacity: showPrev || hideNext ? 0 : 1,
                 child: _HuntPatternCard(
                   key: ValueKey(nextPattern.id),
                   pattern: nextPattern,
@@ -1059,6 +1101,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
             onDragX: _onFrontDragX,
             onPeekSide: _onFrontPeekSide,
             onVoteChange: _updateCurrentVote,
+            canGoPrevious: prevPattern != null,
           ),
         ),
       ],
@@ -1218,6 +1261,7 @@ class _HuntPatternCard extends ConsumerStatefulWidget {
     this.tutorialMode = false,
     this.tutorialStep = 0,
     this.interactive = true,
+    this.canGoPrevious = true,
   });
 
   final PatternCard pattern;
@@ -1242,6 +1286,9 @@ class _HuntPatternCard extends ConsumerStatefulWidget {
 
   /// When false, renders a static peek card (no gestures / actions).
   final bool interactive;
+
+  /// A committed swipe toward the previous card should snap back at deck start.
+  final bool canGoPrevious;
 
   @override
   ConsumerState<_HuntPatternCard> createState() => _HuntPatternCardState();
@@ -1467,6 +1514,80 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         _syncIdleHintAnimations();
       }
     });
+  }
+
+  Future<void> _handleVoteButtonTap() async {
+    if (_voting || _exiting) return;
+    if (_voted) {
+      await _unvoteFromButton();
+      return;
+    }
+    await _flyUpAndUpvote(voteBeforeFlight: true);
+  }
+
+  /// Button taps can undo a vote without treating that action as a swipe.
+  Future<void> _unvoteFromButton() async {
+    if (!_voted || _voting) return;
+    if (_isDemo) {
+      setState(() {
+        _voted = false;
+        _voteCount = (_voteCount - 1).clamp(0, 1 << 30);
+      });
+      return;
+    }
+    if (ref.read(sessionProvider) == null) {
+      if (mounted) context.go(loginLocationFor(context));
+      return;
+    }
+
+    final oldCount = _voteCount;
+    final onVoteChange = widget.onVoteChange;
+    final patternId = widget.pattern.id;
+    final personal = ref.read(personalPatternStateProvider(patternId));
+    final generation = ref
+        .read(personalStateProvider.notifier)
+        .optimisticallySetVote(
+          patternId,
+          false,
+          saved: personal?.saved ?? _saved,
+        );
+    setState(() {
+      _voting = true;
+      _voted = false;
+      _voteCount = (_voteCount - 1).clamp(0, 1 << 30);
+    });
+    onVoteChange?.call(patternId, _voted, _voteCount);
+    try {
+      final response = await ref
+          .read(apiClientProvider)
+          .votePattern(patternId, false);
+      final voted = response['voted'] as bool? ?? false;
+      final voteCount = (response['voteCount'] as num?)?.toInt() ?? _voteCount;
+      if (mounted) {
+        setState(() {
+          _voted = voted;
+          _voteCount = voteCount;
+        });
+      }
+      onVoteChange?.call(patternId, voted, voteCount);
+      ref
+          .read(personalStateProvider.notifier)
+          .confirmVote(patternId, generation, voted, voteCount);
+    } on ApiException catch (error) {
+      if (mounted) {
+        setState(() {
+          _voted = true;
+          _voteCount = oldCount;
+        });
+        _showError(error.message);
+      }
+      onVoteChange?.call(patternId, true, oldCount);
+      ref
+          .read(personalStateProvider.notifier)
+          .rollbackVote(patternId, generation, true, saved: _saved);
+    } finally {
+      if (mounted) setState(() => _voting = false);
+    }
   }
 
   /// Slide-up upvote — matches web `upvoteOnly` (upvote only, never unvote).
@@ -1697,7 +1818,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     // State is reused as a peek, interactive flip resets transform chrome.
   }
 
-  Future<void> _flyUpAndUpvote() async {
+  Future<void> _flyUpAndUpvote({bool voteBeforeFlight = false}) async {
     if (_exiting) return;
 
     // Gate auth before flying — same as web `promptLoginForVote`.
@@ -1708,6 +1829,16 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
       _snapBack();
       if (mounted) context.go(loginLocationFor(context));
       return;
+    }
+
+    if (voteBeforeFlight) {
+      // A button press should visibly acknowledge the vote before the card
+      // leaves. A failed vote cancels the exit and leaves the card in place.
+      unawaited(_upvoteFromSlideUp());
+      await Future<void>.delayed(
+        const Duration(milliseconds: _kVoteButtonFeedbackMs),
+      );
+      if (!mounted || !_voted) return;
     }
 
     _exiting = true;
@@ -1723,8 +1854,8 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     widget.onPeekSide?.call(toNext: true);
 
     final height = MediaQuery.sizeOf(context).height;
-    // Settle a touch past halfway so the pause reads clearly before exit.
-    final midY = -math.max(height * 0.55, 360.0);
+    // Keep most of the card visible during the celebration pause.
+    final midY = -math.min(height * 0.39, 285.0);
     final holdX = _dragX * 0.06;
     setState(() {
       _upvoteDragProgress = 1;
@@ -1746,7 +1877,7 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     if (!widget.tutorialMode) {
       widget.onGesture?.call(_HuntGesture.slideUp);
     }
-    unawaited(_upvoteFromSlideUp());
+    if (!voteBeforeFlight) unawaited(_upvoteFromSlideUp());
 
     final stampMs = widget.tutorialMode
         ? _kTutorialUpvoteStampMs
@@ -1957,6 +2088,12 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
           vx.abs() >= _kSwipeVelocityPxPerSec &&
           vx.sign == (_dragX == 0 ? vx.sign : _dragX.sign);
       final toNext = _dragX < 0 || (_dragX == 0 && vx < 0);
+
+      if (!toNext && !widget.canGoPrevious) {
+        _snapBack();
+        _syncIdleHintAnimations();
+        return;
+      }
 
       if (committedByDistance || committedByVelocity) {
         if (widget.tutorialMode) {
@@ -2303,7 +2440,8 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                                   // A tap is an alternate input for the same
                                   // upvote gesture: animate the card out, show
                                   // the confirmation, then reveal the next card.
-                                  onPressed: () => unawaited(_flyUpAndUpvote()),
+                                  onPressed: () =>
+                                      unawaited(_handleVoteButtonTap()),
                                 ),
                               ),
                               if (download) ...[
