@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/config/env.dart';
+import '../../core/auth/logout.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
@@ -130,7 +130,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 onPressed: _deleting
                     ? null
                     : () async {
-                        await Supabase.instance.client.auth.signOut();
+                        await signOutAndClearLocalData(ref);
                         if (context.mounted) context.go('/');
                       },
                 icon: const Icon(Icons.logout_rounded, size: 18),
@@ -197,7 +197,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     setState(() => _deleting = true);
     try {
       await ref.read(apiClientProvider).delete('/me');
-      await Supabase.instance.client.auth.signOut();
+      await signOutAndClearLocalData(ref);
       if (mounted) {
         showAppSnackBar(context, message: 'Your account has been deleted');
         context.go('/');

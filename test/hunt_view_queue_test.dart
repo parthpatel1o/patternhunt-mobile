@@ -75,6 +75,24 @@ void main() {
   });
 
   test(
+    'discard prevents pending writes from recreating cleared storage',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      final queue = HuntViewQueue('previous-account', prefs, (ids) async {});
+
+      queue.record('one');
+      queue.discard();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        prefs.getStringList('hunt.pendingViews.v1:previous-account'),
+        isNull,
+      );
+      expect(queue.pendingIds, isEmpty);
+    },
+  );
+
+  test(
     'new views survive acknowledgement of an older in-flight batch',
     () async {
       final prefs = await SharedPreferences.getInstance();

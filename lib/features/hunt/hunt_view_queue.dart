@@ -20,6 +20,7 @@ class HuntViewQueue {
   Future<void> _writes = Future.value();
   Future<void>? _flight;
   Timer? _timer;
+  bool _discarded = false;
   String get _key => 'hunt.pendingViews.v1:$userId';
 
   List<String> _stored() => _preferences.getStringList(_key) ?? [];
@@ -27,13 +28,16 @@ class HuntViewQueue {
   Set<String> get pendingIds => {..._pending, ..._stored()};
 
   void start() {
+    if (_discarded) return;
     _timer ??= Timer.periodic(huntViewFlushInterval, (_) => unawaited(flush()));
   }
 
   void record(String id) {
+    if (_discarded) return;
     _pending.add(id);
     _writes = _writes
         .then((_) async {
+          if (_discarded) return;
           _pending.addAll(_stored());
           await _preferences.setStringList(_key, _pending.toList());
         })
@@ -42,6 +46,7 @@ class HuntViewQueue {
   }
 
   Future<void> flush() {
+    if (_discarded) return Future.value();
     if (_flight != null) return _flight!;
     final completer = Completer<void>();
     _flight = completer.future;
@@ -57,12 +62,15 @@ class HuntViewQueue {
   Future<void> _drain() async {
     try {
       await _writes;
+      if (_discarded) return;
       _pending.addAll(_stored());
-      while (_pending.isNotEmpty) {
+      while (!_discarded && _pending.isNotEmpty) {
         final sent = _pending.take(100).toList();
         await _send(sent);
+        if (_discarded) return;
         // Serialize acknowledgements behind any views added during the request.
         _writes = _writes.then((_) async {
+          if (_discarded) return;
           _pending.addAll(_stored());
           _pending.removeAll(sent);
           await _preferences.setStringList(_key, _pending.toList());
@@ -78,5 +86,15 @@ class HuntViewQueue {
     _timer?.cancel();
     _timer = null;
     return flush();
+  }
+
+  /// Cancels this queue without writing or sending anything further.
+  /// Used at logout so a pending old-account write cannot recreate local data
+  /// after the storage has been wiped.
+  void discard() {
+    _discarded = true;
+    _timer?.cancel();
+    _timer = null;
+    _pending.clear();
   }
 }

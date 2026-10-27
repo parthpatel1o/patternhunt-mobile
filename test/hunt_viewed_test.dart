@@ -11,6 +11,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class _HuntApi extends ApiClient {
+  _HuntApi({this.withViewPattern = false});
+
+  final bool withViewPattern;
   final viewed = <String>{};
   final voted = <String>{'pattern-0'};
   final queries = <Map<String, dynamic>>[];
@@ -46,6 +49,7 @@ class _HuntApi extends ApiClient {
             'imageUrls': <String>[],
             'isFree': true,
             'hasPdf': false,
+            if (withViewPattern) 'patternUrl': 'https://example.com/$i',
             'voteCount': 0,
             'voted': false,
             'createdAt': '2026-10-09',
@@ -97,13 +101,27 @@ final _session = Session(
   ),
 );
 
+final _alternateSession = Session(
+  accessToken: 'alternate-test',
+  tokenType: 'bearer',
+  user: User(
+    id: 'another-account',
+    appMetadata: {},
+    userMetadata: {},
+    aud: 'authenticated',
+    createdAt: '2026-10-09',
+  ),
+);
+
+final _testSessionProvider = StateProvider<Session?>((ref) => _session);
+
 Future<void> _mount(WidgetTester tester, _HuntApi api) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = const Size(512, 900);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        sessionProvider.overrideWithValue(_session),
+        sessionProvider.overrideWith((ref) => ref.watch(_testSessionProvider)),
         profileProvider.overrideWith((ref) async => null),
         apiClientProvider.overrideWithValue(api),
       ],
@@ -247,6 +265,94 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+
+  testWidgets('tapping upvote uses the slide-up exit and advances the deck', (
+    tester,
+  ) async {
+    addTearDown(tester.view.reset);
+    final api = _HuntApi();
+    await _mount(tester, api);
+
+    Finder frontCard(String id) => find.ancestor(
+      of: find
+          .byWidgetPredicate(
+            (widget) => widget is GestureDetector && widget.onPanStart != null,
+          )
+          .first,
+      matching: find.byKey(ValueKey(id)),
+    );
+
+    // The next card is kept mounted as a disabled peek, so tap the active
+    // (last) vote button on the front card.
+    await tester.tap(find.widgetWithText(FilledButton, '0').last);
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+    await tester.pumpAndSettle();
+
+    expect(api.voted, contains('pattern-1'));
+    expect(frontCard('pattern-2'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('swipes work from the lower-right area above View Pattern', (
+    tester,
+  ) async {
+    addTearDown(tester.view.reset);
+    final api = _HuntApi(withViewPattern: true);
+    await _mount(tester, api);
+
+    final viewButton = find.widgetWithText(FilledButton, 'View Pattern').last;
+    final buttonRect = tester.getRect(viewButton);
+    // Start in the lower-right padding immediately above the button, where
+    // there is no child control to receive the gesture itself.
+    final gesture = await tester.startGesture(
+      Offset(buttonRect.center.dx, buttonRect.top - 8),
+    );
+    await gesture.moveBy(const Offset(-30, 0));
+    await tester.pump(const Duration(milliseconds: 30));
+    await gesture.moveBy(const Offset(-190, 0));
+    await tester.pump(const Duration(milliseconds: 150));
+    await gesture.up();
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 150));
+    }
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('pattern-2')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('a retained hunt deck resets when the account changes', (
+    tester,
+  ) async {
+    addTearDown(tester.view.reset);
+    final api = _HuntApi();
+    await _mount(tester, api);
+
+    Finder frontCard(String id) => find.ancestor(
+      of: find
+          .byWidgetPredicate(
+            (widget) => widget is GestureDetector && widget.onPanStart != null,
+          )
+          .first,
+      matching: find.byKey(ValueKey(id)),
+    );
+
+    await _swipe(tester, const Offset(-220, 0));
+    expect(frontCard('pattern-2'), findsOneWidget);
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(HuntScreen)),
+    );
+    container.read(_testSessionProvider.notifier).state = _alternateSession;
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(frontCard('pattern-1'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('backgrounding flushes the current small batch', (tester) async {
     addTearDown(tester.view.reset);

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/analytics/analytics.dart';
@@ -109,6 +110,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
   final Set<String> _recordedViews = {};
   HuntViewQueue? _viewQueue;
   final Map<String, String> _viewAccessTokens = {};
+  int _sessionEpoch = 0;
   List<PatternCard> _patterns = const [];
   int _pageOffset = 0;
   int _index = 0;
@@ -137,6 +139,10 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    ref.listenManual<Session?>(sessionProvider, (previous, next) {
+      if (previous?.user.id == next?.user.id) return;
+      _resetForAccountChange();
+    });
     unawaited(_boot());
   }
 
@@ -149,18 +155,19 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    unawaited(_viewQueue?.stop() ?? Future<void>.value());
+    _viewQueue?.discard();
     super.dispose();
   }
 
   Future<void> _boot() async {
+    final sessionEpoch = _sessionEpoch;
     final constants = AppConstants.instance;
     final results = await Future.wait<Object?>([
       _storage.readTutorialSeen(),
       _storage.readShow(),
       _storage.readHuntRun(),
     ]);
-    if (!mounted) return;
+    if (!mounted || sessionEpoch != _sessionEpoch) return;
 
     _tutorialSeen = results[0]! as bool;
     final storedShow = results[1]! as String;
@@ -173,7 +180,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
 
     // Re-entry starts a fresh deck; seen history is stored by the shared API.
     await _storage.clearHuntRun();
-    if (!mounted) return;
+    if (!mounted || sessionEpoch != _sessionEpoch) return;
 
     // Least friction (web parity): jump straight into a random hunt.
     _category = preferredRankBoardCategory(
@@ -186,7 +193,47 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
     _period = previous?.period ?? kDefaultHuntPeriod;
     _show = storedShow;
     _freeOnly = previous?.freeOnly ?? false;
-    await _startHunt();
+    await _startHunt(sessionEpoch: sessionEpoch);
+  }
+
+  /// Indexed tabs remain mounted. On an account change, clear this retained
+  /// deck immediately and start a fresh one for the new session.
+  void _resetForAccountChange() {
+    _sessionEpoch++;
+    _viewQueue?.discard();
+    _viewQueue = null;
+    _viewAccessTokens.clear();
+    if (!mounted) return;
+    setState(() {
+      _demoIndex = 0;
+      _phase = _HuntPhase.boot;
+      _category = 'all';
+      _order = 'random';
+      _period = kDefaultHuntPeriod;
+      _show = kDefaultHuntShowFilter;
+      _freeOnly = false;
+      _seed = '';
+      _recordedViews.clear();
+      _patterns = const [];
+      _pageOffset = 0;
+      _index = 0;
+      _nextOffset = null;
+      _hasMore = false;
+      _loading = false;
+      _error = null;
+      _tutorialSeen = false;
+      _tutorialStep = 0;
+      _tutorialTransitioning = false;
+      _tutorialFinishing = false;
+      _setupCategory = null;
+      _setupOrder = null;
+      _setupPeriod = null;
+      _setupShow = null;
+      _setupFreeOnly = null;
+      _phaseBeforeSetup = null;
+      _peekPrevious = false;
+    });
+    unawaited(_boot());
   }
 
   Map<String, dynamic> _huntQuery(int offset) {
@@ -203,15 +250,19 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
     };
   }
 
-  Future<_HuntPage> _fetchPage(int offset) async {
-    if (!mounted) throw StateError("Hunt closed");
+  Future<_HuntPage> _fetchPage(int offset, {required int sessionEpoch}) async {
+    if (!mounted || sessionEpoch != _sessionEpoch) {
+      throw StateError('Hunt session changed');
+    }
     final session = ref.read(sessionProvider);
     if (session != null) {
       _viewAccessTokens[session.user.id] = session.accessToken;
       if (_viewQueue?.userId != session.user.id) {
-        await _viewQueue?.stop();
+        _viewQueue?.discard();
         final preferences = await SharedPreferences.getInstance();
-        if (!mounted) throw StateError("Hunt closed");
+        if (!mounted || sessionEpoch != _sessionEpoch) {
+          throw StateError('Hunt session changed');
+        }
         final api = ref.read(apiClientProvider);
         _viewQueue = HuntViewQueue(session.user.id, preferences, (ids) async {
           await api.post(
@@ -224,10 +275,12 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
       }
       await _viewQueue!.flush();
     } else {
-      await _viewQueue?.stop();
+      _viewQueue?.discard();
       _viewQueue = null;
     }
-    if (!mounted) throw StateError("Hunt closed");
+    if (!mounted || sessionEpoch != _sessionEpoch) {
+      throw StateError('Hunt session changed');
+    }
     return ref
         .read(apiClientProvider)
         .getData(
@@ -268,6 +321,7 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
           },
         )
       ..then((page) {
+        if (sessionEpoch != _sessionEpoch) return;
         ref
             .read(personalStateProvider.notifier)
             .registerPatternIds(page.patterns.map((pattern) => pattern.id));
@@ -277,18 +331,24 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
   Future<void> _loadPage({
     required int offset,
     required int targetAbsoluteIndex,
+    int? sessionEpoch,
   }) async {
+    final expectedSessionEpoch = sessionEpoch ?? _sessionEpoch;
+    if (!mounted || expectedSessionEpoch != _sessionEpoch) return;
     setState(() {
       _loading = true;
       _error = null;
       _phase = _HuntPhase.hunting;
     });
     try {
-      var page = await _fetchPage(offset);
+      var page = await _fetchPage(offset, sessionEpoch: expectedSessionEpoch);
       while (page.patterns.isEmpty && page.hasMore && page.nextOffset != null) {
-        page = await _fetchPage(page.nextOffset!);
+        page = await _fetchPage(
+          page.nextOffset!,
+          sessionEpoch: expectedSessionEpoch,
+        );
       }
-      if (!mounted) return;
+      if (!mounted || expectedSessionEpoch != _sessionEpoch) return;
       setState(() {
         if (offset == 0) {
           _patterns = page.patterns;
@@ -309,22 +369,26 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
             ? _HuntPhase.end
             : _HuntPhase.hunting;
       });
-      await _persistRun();
+      await _persistRun(sessionEpoch: expectedSessionEpoch);
     } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted && expectedSessionEpoch == _sessionEpoch) {
+        setState(() => _error = error.message);
+      }
     } catch (_) {
-      if (mounted) {
+      if (mounted && expectedSessionEpoch == _sessionEpoch) {
         setState(() => _error = 'Couldn’t load patterns to hunt');
       }
     } finally {
-      if (mounted) {
+      if (mounted && expectedSessionEpoch == _sessionEpoch) {
         setState(() => _loading = false);
         _recordCurrentView();
       }
     }
   }
 
-  Future<void> _startHunt() async {
+  Future<void> _startHunt({int? sessionEpoch}) async {
+    final expectedSessionEpoch = sessionEpoch ?? _sessionEpoch;
+    if (expectedSessionEpoch != _sessionEpoch) return;
     _seed = createHuntSeed();
     await _storage.writePreferences(
       category: _category,
@@ -333,11 +397,18 @@ class _HuntScreenState extends ConsumerState<HuntScreen>
       show: _show,
       freeOnly: _freeOnly,
     );
-    if (!mounted) return;
-    await _loadPage(offset: 0, targetAbsoluteIndex: 0);
+    if (!mounted || expectedSessionEpoch != _sessionEpoch) return;
+    await _loadPage(
+      offset: 0,
+      targetAbsoluteIndex: 0,
+      sessionEpoch: expectedSessionEpoch,
+    );
   }
 
-  Future<void> _persistRun() {
+  Future<void> _persistRun({int? sessionEpoch}) {
+    if (sessionEpoch != null && sessionEpoch != _sessionEpoch) {
+      return Future.value();
+    }
     return _storage.writeHuntRun(
       HuntRun(
         seed: _seed,
@@ -1398,75 +1469,6 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     });
   }
 
-  Future<void> _toggleVote() async {
-    if (_voting) return;
-
-    if (_isDemo) {
-      setState(() {
-        if (!_voted) {
-          _voted = true;
-          _voteCount = (_voteCount + 1).clamp(0, 1 << 30);
-        }
-      });
-      return;
-    }
-
-    if (ref.read(sessionProvider) == null) {
-      if (mounted) context.go(loginLocationFor(context));
-      return;
-    }
-    final oldVoted = _voted;
-    final oldCount = _voteCount;
-    final onVoteChange = widget.onVoteChange;
-    final patternId = widget.pattern.id;
-    final desiredVoted = !oldVoted;
-    final personal = ref.read(personalPatternStateProvider(patternId));
-    final generation = ref
-        .read(personalStateProvider.notifier)
-        .optimisticallySetVote(
-          patternId,
-          desiredVoted,
-          saved: personal?.saved ?? _saved,
-        );
-    setState(() {
-      _voting = true;
-      _voted = desiredVoted;
-      _voteCount = (_voteCount + (_voted ? 1 : -1)).clamp(0, 1 << 30);
-    });
-    onVoteChange?.call(patternId, _voted, _voteCount);
-    try {
-      final response = await ref
-          .read(apiClientProvider)
-          .votePattern(patternId, desiredVoted);
-      final voted = response['voted'] as bool? ?? _voted;
-      final voteCount = (response['voteCount'] as num?)?.toInt() ?? _voteCount;
-      if (mounted) {
-        setState(() {
-          _voted = voted;
-          _voteCount = voteCount;
-        });
-      }
-      onVoteChange?.call(patternId, voted, voteCount);
-      ref
-          .read(personalStateProvider.notifier)
-          .confirmVote(patternId, generation, voted, voteCount);
-    } on ApiException catch (error) {
-      if (mounted) {
-        setState(() {
-          _voted = oldVoted;
-          _voteCount = oldCount;
-        });
-        _showError(error.message);
-      }
-      onVoteChange?.call(patternId, oldVoted, oldCount);
-      ref
-          .read(personalStateProvider.notifier)
-          .rollbackVote(patternId, generation, oldVoted, saved: _saved);
-    } finally {
-      if (mounted) setState(() => _voting = false);
-    }
-  }
-
   /// Slide-up upvote — matches web `upvoteOnly` (upvote only, never unvote).
   Future<void> _upvoteFromSlideUp() async {
     if (_isDemo) {
@@ -2026,7 +2028,8 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
     );
   }
 
-  /// Swipe lives on photo + meta, not the action row — parent pan was eating Save taps.
+  /// One drag surface spans the entire card. Nested buttons and links still
+  /// receive a tap, while a drag from any point on the card wins the gesture.
   Widget _maybePan({required Widget child}) {
     if (!widget.interactive) return child;
     return GestureDetector(
@@ -2087,68 +2090,69 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
         cardCoach: cardCoach,
       ),
     );
-    final photoSection = _maybePan(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (images.length > 1)
-              Row(
-                children: [
-                  for (var index = 0; index < images.length; index++) ...[
-                    if (index > 0) const SizedBox(width: 6),
-                    Expanded(
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: index == _imageIndex
-                              ? AppColors.accent
-                              : AppColors.border,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
+    final photoSection = Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (images.length > 1)
+            Row(
+              children: [
+                for (var index = 0; index < images.length; index++) ...[
+                  if (index > 0) const SizedBox(width: 6),
+                  Expanded(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: index == _imageIndex
+                            ? AppColors.accent
+                            : AppColors.border,
+                        borderRadius: BorderRadius.circular(99),
                       ),
                     ),
-                  ],
+                  ),
                 ],
-              )
-            else
-              const SizedBox(height: 6),
-            const SizedBox(height: 12),
-            if (fitPhotoToHeight)
-              Expanded(child: Center(child: photo))
-            else
-              photo,
-          ],
-        ),
+              ],
+            )
+          else
+            const SizedBox(height: 6),
+          const SizedBox(height: 12),
+          if (fitPhotoToHeight)
+            Expanded(child: Center(child: photo))
+          else
+            photo,
+        ],
       ),
     );
 
-    final cardBody = Container(
-      // Keep the clip wrapper mounted when a hint hands off to a live drag.
-      // Switching from Clip.none replaces the pan recognizer mid-gesture.
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.border),
-        boxShadow: AppShadows.card,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (fitPhotoToHeight) Expanded(child: photoSection) else photoSection,
-          Container(
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: AppColors.border)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _maybePan(
-                  child: Padding(
+    final cardBody = _maybePan(
+      child: Container(
+        // Keep the clip wrapper mounted when a hint hands off to a live drag.
+        // Switching from Clip.none replaces the pan recognizer mid-gesture.
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppColors.border),
+          boxShadow: AppShadows.card,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (fitPhotoToHeight)
+              Expanded(child: photoSection)
+            else
+              photoSection,
+            Container(
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: AppColors.border)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2253,170 +2257,176 @@ class _HuntPatternCardState extends ConsumerState<_HuntPatternCard>
                       ],
                     ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                  child: _isDemo && !widget.tutorialMode && widget.interactive
-                      ? const Text(
-                          'Try the gestures on this card — nothing is saved until you start hunting',
-                          style: TextStyle(
-                            color: AppColors.muted,
-                            fontSize: 13,
-                            height: 1.35,
-                          ),
-                        )
-                      : Row(
-                          children: [
-                            _RoundActionButton(
-                              tooltip: _saved ? 'Saved' : 'Save',
-                              iconPop: _savePop,
-                              icon: _saved
-                                  ? Icons.bookmark_rounded
-                                  : Icons.bookmark_outline_rounded,
-                              onPressed:
-                                  (!widget.interactive ||
-                                      widget.tutorialMode ||
-                                      _saving)
-                                  ? null
-                                  : _toggleSave,
-                              onLongPress:
-                                  (!widget.interactive ||
-                                      widget.tutorialMode ||
-                                      _saving)
-                                  ? null
-                                  : _openSaveSheet,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                    child: _isDemo && !widget.tutorialMode && widget.interactive
+                        ? const Text(
+                            'Try the gestures on this card — nothing is saved until you start hunting',
+                            style: TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 13,
+                              height: 1.35,
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _VoteButton(
-                                voted: _voted || _heartPop,
-                                voteCount: _voteCount,
-                                // Tutorial: non-tappable but still paints + celebrates.
-                                busy:
-                                    !widget.interactive ||
-                                    _voting ||
-                                    widget.tutorialMode,
-                                celebrate: _heartPop,
-                                onPressed: _toggleVote,
+                          )
+                        : Row(
+                            children: [
+                              _RoundActionButton(
+                                tooltip: _saved ? 'Saved' : 'Save',
+                                iconPop: _savePop,
+                                icon: _saved
+                                    ? Icons.bookmark_rounded
+                                    : Icons.bookmark_outline_rounded,
+                                onPressed:
+                                    (!widget.interactive ||
+                                        widget.tutorialMode ||
+                                        _saving)
+                                    ? null
+                                    : _toggleSave,
+                                onLongPress:
+                                    (!widget.interactive ||
+                                        widget.tutorialMode ||
+                                        _saving)
+                                    ? null
+                                    : _openSaveSheet,
                               ),
-                            ),
-                            if (download) ...[
                               const SizedBox(width: 8),
                               Expanded(
-                                child: SizedBox(
-                                  height: _kActionBtnHeight,
-                                  child: FilledButton(
-                                    // Peek cards keep onPressed null (IgnorePointer
-                                    // also blocks taps) but must look enabled so
-                                    // peek→front doesn’t flash a gray CTA.
-                                    onPressed:
-                                        (!widget.interactive ||
-                                            widget.tutorialMode ||
-                                            _ctaLoading)
-                                        ? null
-                                        : _downloadPdf,
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: AppColors.accent,
-                                      foregroundColor:
-                                          AppColors.accentForeground,
-                                      disabledBackgroundColor: AppColors.accent,
-                                      disabledForegroundColor:
-                                          AppColors.accentForeground,
-                                      shape: const StadiumBorder(),
-                                      textStyle: const TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    child: FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        _ctaLoading ? 'Loading…' : 'Download',
-                                        maxLines: 1,
-                                        softWrap: false,
-                                      ),
-                                    ),
-                                  ),
+                                child: _VoteButton(
+                                  voted: _voted || _heartPop,
+                                  voteCount: _voteCount,
+                                  // Tutorial: non-tappable but still paints + celebrates.
+                                  busy:
+                                      !widget.interactive ||
+                                      _voting ||
+                                      widget.tutorialMode,
+                                  celebrate: _heartPop,
+                                  // A tap is an alternate input for the same
+                                  // upvote gesture: animate the card out, show
+                                  // the confirmation, then reveal the next card.
+                                  onPressed: () => unawaited(_flyUpAndUpvote()),
                                 ),
                               ),
-                            ],
-                            if (view) ...[
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: SizedBox(
-                                  height: _kActionBtnHeight,
-                                  child: FilledButton(
-                                    onPressed:
-                                        (!widget.interactive ||
-                                            widget.tutorialMode)
-                                        ? null
-                                        : _viewPattern,
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: AppColors.accent,
-                                      foregroundColor:
-                                          AppColors.accentForeground,
-                                      disabledBackgroundColor: AppColors.accent,
-                                      disabledForegroundColor:
-                                          AppColors.accentForeground,
-                                      shape: const StadiumBorder(),
-                                      textStyle: const TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 14,
+                              if (download) ...[
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: SizedBox(
+                                    height: _kActionBtnHeight,
+                                    child: FilledButton(
+                                      // Peek cards keep onPressed null (IgnorePointer
+                                      // also blocks taps) but must look enabled so
+                                      // peek→front doesn’t flash a gray CTA.
+                                      onPressed:
+                                          (!widget.interactive ||
+                                              widget.tutorialMode ||
+                                              _ctaLoading)
+                                          ? null
+                                          : _downloadPdf,
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: AppColors.accent,
+                                        foregroundColor:
+                                            AppColors.accentForeground,
+                                        disabledBackgroundColor:
+                                            AppColors.accent,
+                                        disabledForegroundColor:
+                                            AppColors.accentForeground,
+                                        shape: const StadiumBorder(),
+                                        textStyle: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 14,
+                                        ),
                                       ),
-                                    ),
-                                    child: const FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        'View Pattern',
-                                        maxLines: 1,
-                                        softWrap: false,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                            if (!download &&
-                                !view &&
-                                (_isDemo || widget.tutorialMode)) ...[
-                              // Web `HUNT_CARD_CTA_PLACEHOLDER` — keeps actions aligned.
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: SizedBox(
-                                  height: _kActionBtnHeight,
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: AppColors.background,
-                                      borderRadius: BorderRadius.circular(999),
-                                      border: Border.all(
-                                        color: AppColors.border,
-                                      ),
-                                    ),
-                                    child: const Center(
-                                      child: Text(
-                                        'No store link',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: AppColors.muted,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 13,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          _ctaLoading ? 'Loading…' : 'Download',
+                                          maxLines: 1,
+                                          softWrap: false,
                                         ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
+                              ],
+                              if (view) ...[
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: SizedBox(
+                                    height: _kActionBtnHeight,
+                                    child: FilledButton(
+                                      onPressed:
+                                          (!widget.interactive ||
+                                              widget.tutorialMode)
+                                          ? null
+                                          : _viewPattern,
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: AppColors.accent,
+                                        foregroundColor:
+                                            AppColors.accentForeground,
+                                        disabledBackgroundColor:
+                                            AppColors.accent,
+                                        disabledForegroundColor:
+                                            AppColors.accentForeground,
+                                        shape: const StadiumBorder(),
+                                        textStyle: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      child: const FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          'View Pattern',
+                                          maxLines: 1,
+                                          softWrap: false,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              if (!download &&
+                                  !view &&
+                                  (_isDemo || widget.tutorialMode)) ...[
+                                // Web `HUNT_CARD_CTA_PLACEHOLDER` — keeps actions aligned.
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: SizedBox(
+                                    height: _kActionBtnHeight,
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        color: AppColors.background,
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
+                                        border: Border.all(
+                                          color: AppColors.border,
+                                        ),
+                                      ),
+                                      child: const Center(
+                                        child: Text(
+                                          'No store link',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: AppColors.muted,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
-                        ),
-                ),
-              ],
+                          ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          if (!fitPhotoToHeight)
-            Expanded(child: _maybePan(child: const SizedBox.expand())),
-        ],
+            if (!fitPhotoToHeight) const Expanded(child: SizedBox.expand()),
+          ],
+        ),
       ),
     );
 

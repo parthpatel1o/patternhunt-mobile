@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/auth/logout.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
@@ -98,7 +98,7 @@ Future<void> showAccountMenu(BuildContext context, WidgetRef ref) async {
                 destructive: true,
                 onTap: () async {
                   Navigator.pop(ctx);
-                  await Supabase.instance.client.auth.signOut();
+                  await signOutAndClearLocalData(ref);
                   if (context.mounted) context.go('/');
                 },
               ),
