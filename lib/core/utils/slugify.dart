@@ -4,7 +4,8 @@ String slugify(String value) {
       .trim()
       .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
       .replaceAll(RegExp(r'^-+|-+$'), '');
-  return slug;
+  // Keep mobile creator URLs compatible with the web/API slug format.
+  return slug.length > 48 ? slug.substring(0, 48) : slug;
 }
 
 String creatorPath(String name) {
