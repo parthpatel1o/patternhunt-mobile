@@ -462,6 +462,7 @@ PatternsPage appendPatternPage(PatternsPage current, PatternsPage next) {
     hasMore: next.hasMore,
     nextOffset: next.nextOffset,
     rankOffset: current.rankOffset,
+    totalCount: next.totalCount ?? current.totalCount,
   );
 }
 
@@ -615,16 +616,27 @@ class MyUpvotesNotifier extends AsyncNotifier<PatternsPage> {
       state = AsyncData(
         current.copyWith(
           patterns: removeUpvotedPattern(current.patterns, patternId),
+          totalCount: current.totalCount == null
+              ? null
+              : (current.totalCount! - 1).clamp(0, current.totalCount!),
         ),
       );
       return;
     }
+    if (!voted) return;
     final removed = _optimisticallyRemoved.remove(patternId);
-    if (voted && removed != null) {
+    if (removed != null) {
       final restored = removed.$1.copyWith(voted: true, voteCount: voteCount);
       final next = [...current.patterns];
       next.insert(removed.$2.clamp(0, next.length), restored);
-      state = AsyncData(current.copyWith(patterns: next));
+      state = AsyncData(
+        current.copyWith(
+          patterns: next,
+          totalCount: current.totalCount == null
+              ? null
+              : current.totalCount! + 1,
+        ),
+      );
     }
   }
 }

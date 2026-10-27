@@ -25,7 +25,7 @@ class MyUpvotesScreen extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 88),
           children: [
-            _UpvotesHeader(count: page.patterns.length),
+            _UpvotesHeader(count: page.totalCount ?? page.patterns.length),
             const SizedBox(height: 24),
             if (page.patterns.isEmpty)
               _UpvotesEmpty(onBrowse: () => context.go('/'))

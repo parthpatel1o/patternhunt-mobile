@@ -79,6 +79,9 @@ class PatternsPage {
   final bool loadingMore;
   final bool loadMoreFailed;
 
+  /// Total matching patterns across all pages, when supplied by the API.
+  final int? totalCount;
+
   /// Index of the first pattern on this page (0 for the top of the board).
   final int rankOffset;
 
@@ -89,6 +92,7 @@ class PatternsPage {
     this.loadingMore = false,
     this.loadMoreFailed = false,
     this.rankOffset = 0,
+    this.totalCount,
   });
 
   factory PatternsPage.fromJson(Map<String, dynamic> json) {
@@ -99,6 +103,7 @@ class PatternsPage {
       hasMore: json['hasMore'] as bool? ?? false,
       nextOffset: json['nextOffset'] as int?,
       rankOffset: json['rankOffset'] as int? ?? 0,
+      totalCount: json['totalCount'] as int?,
     );
   }
 
@@ -109,6 +114,7 @@ class PatternsPage {
     bool? loadingMore,
     bool? loadMoreFailed,
     int? rankOffset,
+    int? totalCount,
   }) {
     return PatternsPage(
       patterns: patterns ?? this.patterns,
@@ -117,6 +123,7 @@ class PatternsPage {
       loadingMore: loadingMore ?? this.loadingMore,
       loadMoreFailed: loadMoreFailed ?? this.loadMoreFailed,
       rankOffset: rankOffset ?? this.rankOffset,
+      totalCount: totalCount ?? this.totalCount,
     );
   }
 }

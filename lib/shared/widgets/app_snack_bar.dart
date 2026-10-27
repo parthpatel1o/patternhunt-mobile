@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/text/app_copy.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
 
@@ -39,7 +40,7 @@ SnackBar buildAppSnackBar({
       children: [
         Expanded(
           child: Text(
-            message,
+            applySentencePunctuation(message),
             textAlign: TextAlign.left,
             style: const TextStyle(
               color: AppColors.foreground,

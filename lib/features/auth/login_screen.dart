@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/auth/login_redirect.dart';
 import '../../core/auth/signup_welcome.dart';
 import '../../core/config/env.dart';
@@ -66,6 +67,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
   }
 
+  Future<bool> _designerNameIsTaken() async {
+    try {
+      final result = await ref.read(apiClientProvider).post(
+        '/designer-names/availability',
+        data: {'designerName': _name.text.trim()},
+      );
+      return result['available'] != true;
+    } on ApiException {
+      // The database constraint remains the authority if this optional check
+      // cannot be reached, so do not turn a network error into a false claim.
+      return false;
+    }
+  }
+
   Future<void> _submit() async {
     setState(() {
       _loading = true;
@@ -90,6 +105,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           setState(() {
             _loading = false;
             _error = 'Enter your designer name (at least 2 characters)';
+          });
+          return;
+        }
+        if (_designer && await _designerNameIsTaken()) {
+          setState(() {
+            _loading = false;
+            _error = 'That designer name is already taken. Please choose another.';
           });
           return;
         }
@@ -121,14 +143,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         if (response.session == null) {
           setState(
             () => _error =
-                'Could not start a session Check your email is confirmed',
+                'Could not start a session. Check your email is confirmed.',
           );
           return;
         }
       }
       if (mounted) context.go(_resolveNextPath());
     } on AuthException catch (e) {
-      setState(() => _error = withoutSentenceFullStops(e.message));
+      final designerNameTaken =
+          _mode == _AuthMode.signup && _designer && await _designerNameIsTaken();
+      if (mounted) {
+        setState(
+          () => _error = designerNameTaken
+              ? 'That designer name is already taken. Please choose another.'
+              : applySentencePunctuation(e.message),
+        );
+      }
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -164,15 +196,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
       if (!launched && mounted) {
         setState(
-          () => _error = 'Could not open Google sign-in Please try again',
+          () => _error = 'Could not open Google sign-in. Please try again.',
         );
       }
     } on AuthException catch (e) {
-      if (mounted) setState(() => _error = withoutSentenceFullStops(e.message));
+      if (mounted) setState(() => _error = applySentencePunctuation(e.message));
     } catch (_) {
       if (mounted) {
         setState(
-          () => _error = 'Could not open Google sign-in Please try again',
+          () => _error = 'Could not open Google sign-in. Please try again.',
         );
       }
     } finally {
@@ -198,7 +230,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         idToken: identityToken,
       );
     } on AuthException catch (e) {
-      if (mounted) setState(() => _error = withoutSentenceFullStops(e.message));
+      if (mounted) setState(() => _error = applySentencePunctuation(e.message));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -276,7 +308,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'We sent a confirmation link to $_signupSuccessEmail Tap it to confirm and log in',
+            'We sent a confirmation link to $_signupSuccessEmail. Tap it to confirm and log in.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 32),

@@ -258,7 +258,7 @@ class _EditPatternScreenState extends ConsumerState<EditPatternScreen> {
       if (mounted) {
         showAppSnackBar(
           context,
-          message: 'Could not crop that photo Try re-adding it',
+          message: 'Could not crop that photo. Try re-adding it.',
         );
       }
     }

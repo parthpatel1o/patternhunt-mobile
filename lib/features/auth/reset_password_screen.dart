@@ -48,7 +48,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
       ref.read(passwordRecoveryProvider.notifier).state = false;
       if (mounted) context.go('/');
     } on AuthException catch (e) {
-      setState(() => _error = withoutSentenceFullStops(e.message));
+      setState(() => _error = applySentencePunctuation(e.message));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

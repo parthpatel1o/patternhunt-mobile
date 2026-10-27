@@ -64,7 +64,7 @@ class MineScreen extends ConsumerWidget {
                   AppEmptyState(
                     title: isDesigner ? 'You haven’t submitted anything yet' : 'Register as a designer in Profile to submit patterns',
                     description: isDesigner
-                        ? 'Submit a pattern and it will show up here You can archive or delete it anytime'
+                        ? 'Submit a pattern and it will show up here. You can archive or delete it anytime.'
                         : 'Once you turn on designer mode, your published patterns will appear in this list',
                     action: isDesigner
                         ? EmptyStatePillButton(
@@ -523,7 +523,7 @@ class _MyPatternRowState extends ConsumerState<_MyPatternRow> {
       builder: (ctx) => AlertDialog(
         title: Text('Delete “${pattern.title}”?'),
         content: const Text(
-          'This pattern will be deleted forever This cannot be undone',
+          'This pattern will be deleted forever. This cannot be undone.',
         ),
         actions: [
           TextButton(

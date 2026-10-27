@@ -902,7 +902,7 @@ class RankBoardRecovery extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Patterns are still there Please try again in a moment',
+            'Patterns are still there. Please try again in a moment.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.muted),
           ),

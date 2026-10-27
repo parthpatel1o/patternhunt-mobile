@@ -103,7 +103,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.text('Could not open Google sign-in Please try again'),
+          find.text('Could not open Google sign-in. Please try again.'),
           findsOneWidget,
         );
         final button = tester.widget<OutlinedButton>(
