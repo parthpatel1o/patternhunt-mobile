@@ -164,6 +164,9 @@ void main() {
         expect(api.submitted?['categorySlug'], category.slug);
         expect(api.submitted?['isFree'], isTrue);
         if (!fail) {
+          final params =
+              router.routeInformationProvider.value.uri.queryParameters;
+          expect(params.containsKey('period'), isFalse);
           expect(
             router
                 .routeInformationProvider

@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/models/models.dart';
 import '../../core/providers/providers.dart';
+import '../../core/providers/rank_board_settings.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
 import '../../shared/widgets/category_dropdown.dart';
@@ -43,9 +44,12 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
   String? category;
-  String period = 'week';
+  String? _periodOverride;
+  String? _defaultPeriod;
+  bool? _boardVisible;
   bool freeOnly = false;
   String? searchQuery;
   bool _categoryInitialized = false;
@@ -63,6 +67,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   double? _lastScrollExtent;
 
   bool get _isSearching => searchQuery != null && searchQuery!.isNotEmpty;
+
+  bool get _followsDefault => !_isSearching && _periodOverride == null;
+  bool get _periodReady => !_followsDefault || _defaultPeriod != null;
+  String get period =>
+      _periodOverride ??
+      (_isSearching ? null : _defaultPeriod) ??
+      AppConstants.instance.defaultRankBoardPeriod;
+
+  PatternQuery get _boardQuery => PatternQuery(
+    category: _isSearching ? null : category,
+    period: period,
+    q: searchQuery,
+    freeOnly: _isSearching ? false : freeOnly,
+  );
 
   bool get _singlePatternMode {
     final id = widget.focusPatternId;
@@ -86,6 +104,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     searchQuery = widget.initialQuery?.trim().isEmpty == true
         ? null
         : widget.initialQuery?.trim();
@@ -94,20 +113,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       category = forced == 'all' ? null : forced;
       _categoryInitialized = true;
     }
-    final forcedPeriod = widget.initialPeriod?.trim();
-    if (forcedPeriod == 'all' ||
-        forcedPeriod == 'week' ||
-        forcedPeriod == 'month') {
-      period = forcedPeriod!;
-    } else {
-      period = AppConstants.instance.defaultRankBoardPeriod;
-    }
+    _periodOverride = parseRankBoardPeriod(widget.initialPeriod?.trim());
     freeOnly = widget.initialFreeOnly;
     final focusId = widget.focusPatternId?.trim();
     if (!_isSearching && focusId != null && focusId.isNotEmpty) {
       _focusId = focusId;
     }
     _scrollController.addListener(_onScroll);
+    unawaited(_refreshDefaultPeriod());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The router's indexed stack disables tickers on inactive tabs.
+    final visible = TickerMode.valuesOf(context).enabled;
+    final returned = _boardVisible == false && visible;
+    _boardVisible = visible;
+    if (returned) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _boardVisible == true) {
+          unawaited(_refreshBoard(returned: true));
+        }
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _boardVisible == true) {
+      unawaited(_refreshDefaultPeriod());
+    }
   }
 
   @override
@@ -135,33 +171,76 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
   }
 
   void _onScroll() {
-    if (_singlePatternMode || !_scrollController.hasClients) return;
+    if (!_periodReady || _singlePatternMode || !_scrollController.hasClients) {
+      return;
+    }
     final pos = _scrollController.position;
     if (pos.pixels < pos.maxScrollExtent - 400) return;
     if (_rankFocusMode) {
       _loadMoreFocused();
       return;
     }
-    final query = PatternQuery(
-      category: _isSearching ? null : category,
-      period: period,
-      q: searchQuery,
-      freeOnly: _isSearching ? false : freeOnly,
-    );
-    ref.read(patternsProvider(query).notifier).loadMore();
+    ref.read(patternsProvider(_boardQuery).notifier).loadMore();
+  }
+
+  Future<bool> _refreshDefaultPeriod() async {
+    if (!_followsDefault) return false;
+    final next = await ref.read(rankBoardSettingsProvider).refreshDefaultPeriod();
+    if (!mounted || !_followsDefault || _defaultPeriod == next) return false;
+
+    final changed = _defaultPeriod != null;
+    setState(() {
+      _defaultPeriod = next;
+      if (changed && _rankFocusMode) {
+        _focusLoadGeneration++;
+        _focusLoadStarted = false;
+        _focusedPage = null;
+        _focusError = null;
+      }
+    });
+    if (changed && _categoryInitialized && !_rankFocusMode) {
+      ref.invalidate(patternsProvider(_boardQuery));
+    }
+    return changed;
+  }
+
+  Future<void> _refreshBoard({bool returned = false}) async {
+    final periodChanged = await _refreshDefaultPeriod();
+    if (!mounted || !_periodReady || !_categoryInitialized) return;
+    if (_singlePatternMode) {
+      ref.invalidate(patternDetailProvider(widget.focusPatternId!));
+    } else if (_rankFocusMode) {
+      _focusLoadGeneration++;
+      _focusLoadStarted = true;
+      if (returned) {
+        setState(() => _focusedPage = null);
+      } else {
+        _revealedFocus = true;
+      }
+      await _loadFocusedBoard();
+    } else if (!periodChanged) {
+      ref.invalidate(patternsProvider(_boardQuery));
+    }
   }
 
   void _maybeStartFocusLoad() {
-    if (_focusLoadStarted || !_rankFocusMode || !_categoryInitialized) return;
+    if (_focusLoadStarted ||
+        !_rankFocusMode ||
+        !_categoryInitialized ||
+        !_periodReady) {
+      return;
+    }
     _focusLoadStarted = true;
+    final generation = _focusLoadGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _loadFocusedBoard();
+      if (mounted && generation == _focusLoadGeneration) _loadFocusedBoard();
     });
   }
 
@@ -270,6 +349,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         current.loadingMore) {
       return;
     }
+    final generation = _focusLoadGeneration;
     setState(
       () => _focusedPage = current.copyWith(
         loadingMore: true,
@@ -288,12 +368,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ).toQuery(offset: current.nextOffset!),
             map: (json) => PatternsPage.fromJson(json as Map<String, dynamic>),
           );
-      if (!mounted) return;
+      if (!mounted || generation != _focusLoadGeneration) return;
       setState(() {
         _focusedPage = appendFocusedBoardPage(current, next);
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || generation != _focusLoadGeneration) return;
       setState(
         () => _focusedPage = current.copyWith(
           loadingMore: false,
@@ -461,7 +541,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (_rankFocusMode) {
       // Match web CategoryBar: category links do not carry freeOnly.
       context.go(
-        _rankBoardLocation(category: next, period: period, freeOnly: false),
+        _rankBoardLocation(category: next, period: _periodOverride),
       );
       return;
     }
@@ -482,13 +562,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
       return;
     }
-    setState(() => period = value);
+    setState(() => _periodOverride = value);
   }
 
   void _onFreeOnlyChanged(bool value) {
     if (_rankFocusMode) {
       context.go(
-        _rankBoardLocation(category: category, period: period, freeOnly: value),
+        _rankBoardLocation(
+          category: category,
+          period: _periodOverride,
+          freeOnly: value,
+        ),
       );
       return;
     }
@@ -497,14 +581,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   String _rankBoardLocation({
     required String? category,
-    required String period,
+    required String? period,
     bool freeOnly = false,
   }) {
     return Uri(
       path: '/',
       queryParameters: {
         'category': category ?? 'all',
-        if (period != 'all') 'period': period,
+        if (period != null) 'period': period,
         if (freeOnly) 'free': '1',
       },
     ).toString();
@@ -513,7 +597,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     ref.listen<Session?>(sessionProvider, (previous, next) {
-      if (previous?.user.id == next?.user.id || !_rankFocusMode || !mounted) {
+      if (previous?.user.id == next?.user.id ||
+          !_rankFocusMode ||
+          !_categoryInitialized ||
+          !_periodReady ||
+          !mounted) {
         return;
       }
       _focusLoadGeneration++;
@@ -522,30 +610,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _focusLoading = true;
       });
       unawaited(_loadFocusedBoard());
-    });
-    ref.listen<int>(homeReturnRefreshProvider, (previous, next) {
-      if (!mounted || !_categoryInitialized) return;
-      if (_singlePatternMode) {
-        ref.invalidate(patternDetailProvider(widget.focusPatternId!));
-      } else if (_rankFocusMode) {
-        _focusLoadGeneration++;
-        setState(() {
-          _focusedPage = null;
-          _focusLoading = true;
-        });
-        unawaited(_loadFocusedBoard());
-      } else {
-        ref.invalidate(
-          patternsProvider(
-            PatternQuery(
-              category: _isSearching ? null : category,
-              period: period,
-              q: searchQuery,
-              freeOnly: _isSearching ? false : freeOnly,
-            ),
-          ),
-        );
-      }
     });
     final profile = ref.watch(profileProvider).valueOrNull;
     final constants = AppConstants.instance;
@@ -573,28 +637,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
     _maybeStartFocusLoad();
 
-    final query = PatternQuery(
-      category: _isSearching ? null : category,
-      period: period,
-      q: searchQuery,
-      freeOnly: _isSearching ? false : freeOnly,
-    );
-
     return RefreshIndicator(
-      onRefresh: () async {
-        if (_singlePatternMode) {
-          ref.invalidate(patternDetailProvider(widget.focusPatternId!));
-        } else if (_rankFocusMode) {
-          _revealedFocus = true;
-          await _loadFocusedBoard();
-        } else {
-          ref.invalidate(patternsProvider(query));
-        }
-      },
+      onRefresh: _refreshBoard,
       color: AppColors.accent,
       child: RankBoardViewport(
         child: ListView(
           controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
             if (!_isSearching) ...[
@@ -616,7 +665,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       const SizedBox(width: 24),
                     _PeriodLink(
                       label: p.label,
-                      selected: period == p.value,
+                      selected: _periodReady && period == p.value,
                       onTap: () => _onPeriodChanged(p.value),
                     ),
                   ],
@@ -673,7 +722,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               _buildSinglePatternResults(constants)
             else if (_rankFocusMode)
               _buildFocusedBoard()
-            else if (!_categoryInitialized)
+            else if (!_categoryInitialized || !_periodReady)
               const Column(
                 children: [
                   PatternCardSkeleton(),
@@ -684,7 +733,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ],
               )
             else
-              _buildSearchOrRankResults(query, constants),
+              _buildSearchOrRankResults(_boardQuery, constants),
           ],
         ),
       ),

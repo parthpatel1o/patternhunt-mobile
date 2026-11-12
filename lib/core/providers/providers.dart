@@ -23,10 +23,6 @@ final authenticatedProvider = Provider<bool>(
   (ref) => ref.watch(sessionProvider) != null,
 );
 
-/// Incremented when the user returns to the Home tab so its retained board
-/// reloads in server order.
-final homeReturnRefreshProvider = StateProvider<int>((ref) => 0);
-
 /// Local mirror of the server's most recently used rank-board category. It
 /// lets Home and Hunt agree immediately while the background PATCH completes.
 final rememberedRankBoardCategoryProvider = StateProvider<String?>((ref) {

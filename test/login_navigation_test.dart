@@ -58,6 +58,5 @@ void main() {
     await tester.tap(find.text('Home'));
     await tester.pumpAndSettle();
     expect(router.routerDelegate.currentConfiguration.uri.path, '/');
-    expect(container.read(homeReturnRefreshProvider), 1);
   });
 }

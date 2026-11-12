@@ -103,13 +103,10 @@ class _AppShellState extends ConsumerState<AppShell> {
         location.startsWith('/hunt');
   }
 
-  void _onTabSelected(int index, List<_NavItem> items, WidgetRef ref) {
+  void _onTabSelected(int index, List<_NavItem> items) {
     final route = items[index].route;
     final branchIndex = _branchByRoute[route];
     if (branchIndex == null) return;
-    if (branchIndex == 0 && widget.navigationShell.currentIndex != 0) {
-      ref.read(homeReturnRefreshProvider.notifier).state++;
-    }
     widget.navigationShell.goBranch(
       branchIndex,
       // Tapping the active tab returns to that tab’s root.
@@ -325,7 +322,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           : _BrandBottomNav(
               items: items,
               selectedIndex: selectedIndex.clamp(0, items.length - 1),
-              onSelected: (index) => _onTabSelected(index, items, ref),
+              onSelected: (index) => _onTabSelected(index, items),
             ),
     );
   }

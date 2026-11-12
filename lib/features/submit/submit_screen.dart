@@ -520,13 +520,12 @@ class _SubmitScreenState extends ConsumerState<SubmitScreen> {
         // Clear the completed draft before returning to the rank board.
         _resetForm();
         FocusManager.instance.primaryFocus?.unfocus();
-        // Land on the past 7 days board and highlight the new pattern in place.
+        // Open the default board and highlight the new pattern in place.
         context.go(
           Uri(
             path: '/',
             queryParameters: {
               'category': submittedCategory,
-              'period': 'week',
               if (patternId != null && patternId.isNotEmpty)
                 'pattern': patternId,
             },
