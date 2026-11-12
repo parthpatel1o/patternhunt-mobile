@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -43,9 +44,14 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
+  static const _defaultPeriodKey = 'rankBoard.defaultPeriod';
+
   String? category;
-  String period = 'week';
+  String? _periodOverride;
+  String? _defaultPeriod;
+  Future<void>? _defaultPeriodRequest;
   bool freeOnly = false;
   String? searchQuery;
   bool _categoryInitialized = false;
@@ -71,6 +77,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   bool get _rankFocusMode => !_isSearching && _focusId != null;
 
+  bool get _followsDefault => !_isSearching && _periodOverride == null;
+
+  String? get _activePeriod =>
+      _periodOverride ??
+      (_isSearching
+          ? AppConstants.instance.defaultRankBoardPeriod
+          : _defaultPeriod);
+
+  PatternQuery _boardQuery(String period) => PatternQuery(
+    category: _isSearching ? null : category,
+    period: period,
+    q: searchQuery,
+    freeOnly: _isSearching ? false : freeOnly,
+  );
+
   String? _categoryLabel(AppConstants constants) {
     if (category == null) return null;
     return constants.categories
@@ -94,20 +115,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       category = forced == 'all' ? null : forced;
       _categoryInitialized = true;
     }
-    final forcedPeriod = widget.initialPeriod?.trim();
-    if (forcedPeriod == 'all' ||
-        forcedPeriod == 'week' ||
-        forcedPeriod == 'month') {
-      period = forcedPeriod!;
-    } else {
-      period = AppConstants.instance.defaultRankBoardPeriod;
-    }
+    _periodOverride = AppConstants.instance.parseRankBoardPeriod(
+      widget.initialPeriod?.trim(),
+    );
     freeOnly = widget.initialFreeOnly;
     final focusId = widget.focusPatternId?.trim();
     if (!_isSearching && focusId != null && focusId.isNotEmpty) {
       _focusId = focusId;
     }
     _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_refreshDefaultPeriod());
   }
 
   @override
@@ -131,34 +149,137 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (widget.initialFreeOnly != oldWidget.initialFreeOnly) {
       setState(() => freeOnly = widget.initialFreeOnly);
     }
+    if (_followsDefault && _defaultPeriod == null) {
+      unawaited(_refreshDefaultPeriod());
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _followsDefault) {
+      unawaited(_refreshBoard(onlyIfPeriodChanged: true));
+    }
+  }
+
+  Future<void> _refreshDefaultPeriod() {
+    if (!_followsDefault) return Future.value();
+    return _defaultPeriodRequest ??= _loadDefaultPeriod().whenComplete(() {
+      _defaultPeriodRequest = null;
+    });
+  }
+
+  Future<void> _loadDefaultPeriod() async {
+    final constants = AppConstants.instance;
+    String? remotePeriod;
+    try {
+      remotePeriod = await ref
+          .read(apiClientProvider)
+          .getData(
+            '/rank-board/settings',
+            map: (json) => constants.parseRankBoardPeriod(
+              json is Map ? json['defaultPeriod'] : null,
+            ),
+          )
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // The board can still load while the settings endpoint is unavailable.
+    }
+
+    if (!mounted) return;
+    String? cachedPeriod;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      cachedPeriod = constants.parseRankBoardPeriod(
+        prefs.getString(_defaultPeriodKey),
+      );
+      if (remotePeriod != null && remotePeriod != cachedPeriod) {
+        await prefs.setString(_defaultPeriodKey, remotePeriod);
+      }
+    } catch (_) {
+      // Local storage is optional. A successful server response still applies.
+    }
+
+    final next =
+        remotePeriod ??
+        _defaultPeriod ??
+        cachedPeriod ??
+        constants.defaultRankBoardPeriod;
+    if (!mounted || next == _defaultPeriod) return;
+    setState(() {
+      _defaultPeriod = next;
+      if (_followsDefault && _rankFocusMode) {
+        _focusLoadGeneration++;
+        _focusedPage = null;
+        _focusError = null;
+        _focusLoadStarted = false;
+      }
+    });
+  }
+
+  Future<void> _refreshBoard({
+    bool onlyIfPeriodChanged = false,
+    bool clearFocusPage = false,
+  }) async {
+    if (_singlePatternMode) {
+      ref.invalidate(patternDetailProvider(widget.focusPatternId!));
+      return;
+    }
+
+    final previousPeriod = _activePeriod;
+    if (_followsDefault) await _refreshDefaultPeriod();
+    if (!mounted || !_categoryInitialized) return;
+    final period = _activePeriod;
+    if (period == null || (onlyIfPeriodChanged && period == previousPeriod)) {
+      return;
+    }
+
+    if (_rankFocusMode) {
+      if (!_focusLoadStarted) return; // The next build starts the new board.
+      _focusLoadGeneration++;
+      if (clearFocusPage) {
+        setState(() {
+          _focusedPage = null;
+          _focusLoading = true;
+        });
+      } else {
+        _revealedFocus = true;
+      }
+      await _loadFocusedBoard();
+    } else {
+      ref.invalidate(patternsProvider(_boardQuery(period)));
+    }
+  }
+
   void _onScroll() {
-    if (_singlePatternMode || !_scrollController.hasClients) return;
+    final period = _activePeriod;
+    if (period == null || _singlePatternMode || !_scrollController.hasClients) {
+      return;
+    }
     final pos = _scrollController.position;
     if (pos.pixels < pos.maxScrollExtent - 400) return;
     if (_rankFocusMode) {
       _loadMoreFocused();
       return;
     }
-    final query = PatternQuery(
-      category: _isSearching ? null : category,
-      period: period,
-      q: searchQuery,
-      freeOnly: _isSearching ? false : freeOnly,
-    );
-    ref.read(patternsProvider(query).notifier).loadMore();
+    ref.read(patternsProvider(_boardQuery(period)).notifier).loadMore();
   }
 
   void _maybeStartFocusLoad() {
-    if (_focusLoadStarted || !_rankFocusMode || !_categoryInitialized) return;
+    if (_focusLoadStarted ||
+        !_rankFocusMode ||
+        !_categoryInitialized ||
+        _activePeriod == null) {
+      return;
+    }
     _focusLoadStarted = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _loadFocusedBoard();
@@ -167,14 +288,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _loadFocusedBoard() async {
     final id = _focusId;
-    if (id == null || !mounted) return;
+    final period = _activePeriod;
+    if (id == null || period == null || !mounted) return;
     final loadGeneration = _focusLoadGeneration;
     setState(() {
       _focusLoading = _focusedPage == null;
       _focusError = null;
     });
     try {
-      final page = await _fetchContainingPage(id);
+      final page = await _fetchContainingPage(id, period);
       if (!mounted ||
           _focusId != id ||
           loadGeneration != _focusLoadGeneration) {
@@ -208,7 +330,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  Future<PatternsPage> _fetchContainingPage(String patternId) async {
+  Future<PatternsPage> _fetchContainingPage(
+    String patternId,
+    String period,
+  ) async {
     final api = ref.read(apiClientProvider);
     final query = PatternQuery(
       category: category,
@@ -264,7 +389,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _loadMoreFocused() async {
     final current = _focusedPage;
-    if (current == null ||
+    final period = _activePeriod;
+    final loadGeneration = _focusLoadGeneration;
+    if (period == null ||
+        current == null ||
         !current.hasMore ||
         current.nextOffset == null ||
         current.loadingMore) {
@@ -288,12 +416,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ).toQuery(offset: current.nextOffset!),
             map: (json) => PatternsPage.fromJson(json as Map<String, dynamic>),
           );
-      if (!mounted) return;
+      if (!mounted || loadGeneration != _focusLoadGeneration) return;
       setState(() {
         _focusedPage = appendFocusedBoardPage(current, next);
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || loadGeneration != _focusLoadGeneration) return;
       setState(
         () => _focusedPage = current.copyWith(
           loadingMore: false,
@@ -461,7 +589,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (_rankFocusMode) {
       // Match web CategoryBar: category links do not carry freeOnly.
       context.go(
-        _rankBoardLocation(category: next, period: period, freeOnly: false),
+        _rankBoardLocation(category: next, period: _periodOverride),
       );
       return;
     }
@@ -482,13 +610,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
       return;
     }
-    setState(() => period = value);
+    setState(() => _periodOverride = value);
   }
 
   void _onFreeOnlyChanged(bool value) {
     if (_rankFocusMode) {
       context.go(
-        _rankBoardLocation(category: category, period: period, freeOnly: value),
+        _rankBoardLocation(
+          category: category,
+          period: _periodOverride,
+          freeOnly: value,
+        ),
       );
       return;
     }
@@ -497,14 +629,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   String _rankBoardLocation({
     required String? category,
-    required String period,
+    String? period,
     bool freeOnly = false,
   }) {
     return Uri(
       path: '/',
       queryParameters: {
         'category': category ?? 'all',
-        if (period != 'all') 'period': period,
+        if (period != null) 'period': period,
         if (freeOnly) 'free': '1',
       },
     ).toString();
@@ -524,28 +656,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       unawaited(_loadFocusedBoard());
     });
     ref.listen<int>(homeReturnRefreshProvider, (previous, next) {
-      if (!mounted || !_categoryInitialized) return;
-      if (_singlePatternMode) {
-        ref.invalidate(patternDetailProvider(widget.focusPatternId!));
-      } else if (_rankFocusMode) {
-        _focusLoadGeneration++;
-        setState(() {
-          _focusedPage = null;
-          _focusLoading = true;
-        });
-        unawaited(_loadFocusedBoard());
-      } else {
-        ref.invalidate(
-          patternsProvider(
-            PatternQuery(
-              category: _isSearching ? null : category,
-              period: period,
-              q: searchQuery,
-              freeOnly: _isSearching ? false : freeOnly,
-            ),
-          ),
-        );
-      }
+      unawaited(_refreshBoard(clearFocusPage: true));
     });
     final profile = ref.watch(profileProvider).valueOrNull;
     final constants = AppConstants.instance;
@@ -573,24 +684,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
     _maybeStartFocusLoad();
 
-    final query = PatternQuery(
-      category: _isSearching ? null : category,
-      period: period,
-      q: searchQuery,
-      freeOnly: _isSearching ? false : freeOnly,
-    );
+    final period = _activePeriod;
 
     return RefreshIndicator(
-      onRefresh: () async {
-        if (_singlePatternMode) {
-          ref.invalidate(patternDetailProvider(widget.focusPatternId!));
-        } else if (_rankFocusMode) {
-          _revealedFocus = true;
-          await _loadFocusedBoard();
-        } else {
-          ref.invalidate(patternsProvider(query));
-        }
-      },
+      onRefresh: _refreshBoard,
       color: AppColors.accent,
       child: RankBoardViewport(
         child: ListView(
@@ -673,7 +770,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               _buildSinglePatternResults(constants)
             else if (_rankFocusMode)
               _buildFocusedBoard()
-            else if (!_categoryInitialized)
+            else if (!_categoryInitialized || period == null)
               const Column(
                 children: [
                   PatternCardSkeleton(),
@@ -684,7 +781,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ],
               )
             else
-              _buildSearchOrRankResults(query, constants),
+              _buildSearchOrRankResults(_boardQuery(period), constants),
           ],
         ),
       ),
@@ -708,7 +805,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       data: (pattern) => PatternCardWidget(
         pattern: pattern,
         rank: 1,
-        rankPeriod: period,
+        rankPeriod: _activePeriod!,
         showRank: false,
       ),
     );
@@ -834,7 +931,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 : ValueKey(page.patterns[i].id),
             pattern: page.patterns[i],
             rank: badgeRanks[page.patterns[i].id] ?? page.rankOffset + i + 1,
-            rankPeriod: period,
+            rankPeriod: boardQuery?.period ?? _activePeriod!,
             showRank: showRank,
             animateEntrance: animateEntrance,
             highlight: _showFocusEffect && page.patterns[i].id == _focusId,
