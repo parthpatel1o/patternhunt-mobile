@@ -56,6 +56,11 @@ class AppConstants {
   final int imageOutputSize;
   final int maxPdfBytes;
 
+  String? parseRankBoardPeriod(Object? value) {
+    if (value is! String) return null;
+    return rankPeriods.any((option) => option.value == value) ? value : null;
+  }
+
   static AppConstants? _instance;
 
   static AppConstants get instance {
